@@ -1,0 +1,378 @@
+# ============================================================
+# KjobsUltimate — Messages
+# ============================================================
+#
+# CODES COULEUR (utiliser § OU & indifféremment)
+# ─────────────────────────────────────────────────────────────
+# §0 Noir        §1 Bleu foncé    §2 Vert foncé    §3 Cyan foncé
+# §4 Rouge foncé §5 Violet        §6 Or            §7 Gris clair
+# §8 Gris foncé  §9 Bleu          §a Vert vif       §b Cyan vif
+# §c Rouge vif   §d Rose          §e Jaune          §f Blanc
+# §l Gras        §o Italique      §n Souligné       §m Barré
+# §r Réinitialiser le formatage
+#
+# RÈGLE GÉNÉRALE
+# ─────────────────────────────────────────────────────────────
+# • "" (chaîne vide) = message désactivé → aucun texte envoyé au joueur.
+# • {prefix} injecte la valeur de la clé "prefix" ci-dessous.
+# • Les placeholders entre {} sont propres à KjobsUltimate.
+# • Les placeholders %papi% nécessitent PlaceholderAPI installé.
+#
+# LISTE COMPLÈTE DES PLACEHOLDERS
+# ─────────────────────────────────────────────────────────────
+# {prefix}    → valeur de "prefix" définie ci-dessous
+# {player}    → pseudo du joueur concerné
+# {job}       → display_name du job (ex : "§bMineur")
+# {level}     → niveau courant ou niveau atteint après level up
+# {xp}        → XP courant dans le niveau
+# {xp_next}   → XP requis pour passer au niveau suivant
+# {quest}     → nom de la quête concernée
+# {slot}      → numéro du slot (1–5)
+# {old_job}   → display_name de l'ancien job (lors d'un changement)
+# {new_job}   → display_name du nouveau job (lors d'un changement)
+# {unclaimed} → nombre de quêtes complétées non encore réclamées
+# {list}      → liste des IDs de jobs valides (commandes admin)
+# ─────────────────────────────────────────────────────────────
+
+# Préfixe global injecté via {prefix} dans chaque message.
+# Exemple : "§8[§6Jobs§8] §r" → affiche "[Jobs] " coloré en début de ligne.
+prefix: "§8[§6Jobs§8] §r"
+
+# ─── Level Up ───────────────────────────────────────────────
+# message   : chat privé au joueur quand il monte de niveau.
+#             Placeholders : {prefix} {player} {job} {level}
+#
+# broadcast : annonce publique à TOUS les joueurs. "" = désactivé.
+#             Conseil : réserver aux niveaux importants (ex : 10, 25, max).
+#             La récompense level_rewards dans jobs/*.yml peut aussi broadcaster.
+#             Exemple : "§6§l[Jobs] §e{player} §6passe §b{job} §6niveau §e{level} !"
+#
+# title     : popup titre/sous-titre affiché au joueur.
+#   enabled   : true/false
+#   title     : ligne principale (grande). Placeholders : {level} {job}
+#   subtitle  : ligne secondaire (petite). Placeholders : {level} {job}
+#   fade_in   : ticks d'apparition   (20 ticks = 1 seconde)
+#   stay      : ticks d'affichage    (40 = 2 secondes recommandé)
+#   fade_out  : ticks de disparition (10 = 0.5 seconde recommandé)
+#   Total visible : fade_in + stay + fade_out ticks
+levelup:
+  message: "{prefix}§6Bravo §e{player} §6! Tu passes §b{job} §6niveau §e{level} §6!"
+  broadcast: ""
+  title:
+    enabled: true
+    title: "§6§lNIVEAU {level}"
+    subtitle: "§b{job} §7atteint !"
+    fade_in: 10
+    stay: 40
+    fade_out: 10
+
+# ─── Quêtes ─────────────────────────────────────────────────
+# completed           : message quand une quête est terminée (récompense à réclamer).
+#                       Placeholder : {prefix} {quest}
+# claimed             : message quand le joueur récupère sa récompense dans le menu.
+#                       Placeholder : {prefix} {quest}
+# reward_inventory_full : inventaire plein → les items sont droppés au sol du joueur.
+# reset_daily         : message quand les quêtes quotidiennes se réinitialisent.
+# reset_weekly        : message quand les quêtes hebdomadaires se réinitialisent.
+quest:
+  completed: "{prefix}§a§lQuête terminée ! §f{quest} §7— Ouvre §e/jobs §7pour récupérer ta récompense."
+  claim_processing: "{prefix}§eVérification transactionnelle de la récompense en cours..."
+  claimed: "{prefix}§aRécompense récupérée pour §f{quest} §a!"
+  claim_failed: "{prefix}§cLa récompense n'a pas été distribuée : réservation impossible. Réessaie plus tard."
+  claim_locked: "{prefix}§cCette distribution est verrouillée pour vérification staff. Aucun second versement automatique."
+  reward_inventory_full: "{prefix}§cTon inventaire est plein ! Les items ont été droppés à tes pieds."
+  reset_daily: "{prefix}§7Tes quêtes quotidiennes ont été réinitialisées !"
+  reset_weekly: "{prefix}§7Tes quêtes hebdomadaires ont été réinitialisées !"
+
+# ─── Slots ──────────────────────────────────────────────────
+# unlocked          : notification quand un nouveau slot de job se débloque.
+#                     Placeholder : {prefix}
+# job_selected      : confirmation quand le joueur choisit un job dans un slot.
+#                     Placeholders : {prefix} {job} {slot}
+# job_changed       : confirmation quand le changement de job est effectif.
+#                     Placeholders : {prefix} {slot} {old_job} {new_job}
+# no_slot_available : le joueur essaie de prendre un job alors que tous ses slots sont pris.
+#                     Placeholder : {prefix}
+# choose_first_job  : affiché quand un joueur se connecte sans aucun job assigné.
+#                     Placeholder : {prefix}
+slots:
+  unlocked: "{prefix}§a§lNOUVEAU SLOT DÉBLOQUÉ ! §7Tu peux pratiquer un second métier via §e/jobs §7!"
+  job_selected: "{prefix}§7Tu pratiques maintenant §b{job} §7dans le slot §f{slot}§7."
+  job_changed: "{prefix}§7Tu changes de métier dans le slot §f{slot} §7: §b{old_job} §7→ §b{new_job}§7."
+  no_slot_available: "{prefix}§cTu n'as pas de slot disponible. Progresse dans ton métier actuel !"
+  choose_first_job: "{prefix}§6Choisis ton premier métier pour commencer !"
+  favorite_set: "{prefix}&7Job favori: &e{job}"
+
+# ─── Toggle HUD ─────────────────────────────────────────────
+# enabled  : confirmation quand le joueur active son HUD via /jobs hud
+# disabled : confirmation quand le joueur désactive son HUD via /jobs hud
+hud_toggle:
+  enabled: "{prefix}§aHUD activé. §7BossBar={bossbar} §7ActionBar={actionbar}"
+  disabled: "{prefix}§cHUD désactivé."
+  bossbar: "{prefix}§7BossBar jobs: {state}"
+  actionbar: "{prefix}§7ActionBar jobs: {state}"
+
+# ─── Anti-abuse ─────────────────────────────────────────────
+# creative_blocked    : message si le joueur gagne XP en mode créatif.
+#                       "" = silencieux (recommandé pour ne pas spammer).
+# silktouch_blocked   : message si un bloc silk-touch ne donne pas XP.
+#                       "" = silencieux (recommandé — évite le spam lors des mines).
+# block_cooldown      : message si le bloc est encore en cooldown anti-farm.
+#                       "" = silencieux (recommandé).
+# daily_cap_reached   : message quand le plafond d'XP quotidien est atteint.
+#                       Placeholders : {prefix} {job}
+# pvp_cooldown        : message quand le Prétorien tente de re-tuer une cible en cooldown.
+#                       Placeholders : {prefix} {player}
+# hud_toggle_disabled : message si le toggle HUD est désactivé côté serveur.
+# worldguard_blocked  : message si une région WorldGuard bloque le gain d'XP.
+anti_abuse:
+  pvp_relation_blocked: "{prefix}&cCe kill ne donne pas d'XP Pretorien &7(relation: &e{relation}&7)."
+  pvp_same_ip_blocked: "{prefix}&cCe kill ne donne pas d'XP Pretorien &7(meme IP que &e{player}&7)."
+  pvp_daily_kill_cap_reached: "{prefix}&cTu as atteint le cap Pretorien de &e{amount} kills &csur cette periode."
+  creative_blocked: ""
+  silktouch_blocked: ""
+  block_cooldown: ""
+  daily_cap_reached: "{prefix}§cTu as atteint le cap d'XP quotidien pour §b{job}§c. Reviens demain !"
+  pvp_cooldown: "{prefix}§cTu dois attendre avant de pouvoir retuer §b{player}§c pour de l'XP."
+  hud_toggle_disabled: "{prefix}§cLe toggle HUD est désactivé sur ce serveur."
+  worldguard_blocked: "{prefix}§cTu ne peux pas gagner d'XP dans cette zone."
+
+# ─── Changement de Job ──────────────────────────────────────
+# Flux complet d'un changement de job :
+#   1. /jobs changer <job> → "warning" envoyé + "unclaimed_warning" si quêtes pendantes
+#   2. 30 secondes pour taper /jobs confirmer ou /jobs annuler → "confirm_prompt"
+#   3a. /jobs confirmer → "confirmed"
+#   3b. /jobs annuler   → "cancelled"
+#   3c. Délai expiré    → "confirm_expired" (envoyé à la prochaine interaction)
+#
+# warning          : avertissement avant changement. Placeholders : {prefix} {old_job} {new_job}
+# unclaimed_warning: alerte si quêtes non réclamées. Placeholders : {prefix} {unclaimed} {old_job}
+# confirm_prompt   : invite à confirmer. Placeholder : {prefix}
+# confirmed        : changement effectué. Placeholder : {prefix}
+# cancelled        : changement annulé. Placeholder : {prefix}
+# confirm_expired  : délai de confirmation dépassé. Placeholder : {prefix}
+job_change:
+  warning: "{prefix}§cAttention ! Tu vas abandonner §b{old_job}§c. Toutes ses quêtes (en cours et non réclamées) seront perdues."
+  replace_warning: "{prefix}&cAttention: remplacer &e{old_job}&c par &e{new_job}&c supprimera sa progression."
+  leave_warning: "{prefix}&cAttention: quitter &e{job}&c effacera toute sa progression."
+  unclaimed_warning: "{prefix}§c§l{unclaimed} quête(s) complétée(s) non réclamée(s) pour §b{old_job}§c seront perdues définitivement !"
+  confirm_prompt: "{prefix}§eTape §f/jobs confirmer §epour confirmer ou §f/jobs annuler §epour annuler."
+  confirmed: "{prefix}§aMétier changé avec succès !"
+  cancelled: "{prefix}§7Changement de métier annulé."
+  confirm_expired: "{prefix}§cLa confirmation a expiré. Recommence depuis §e/jobs§c."
+  no_pending: "{prefix}&7Aucune action en attente."
+  not_unlocked: "{prefix}&cTu n'as pas debloque ce job."
+  no_longer_unlocked: "{prefix}&cCe job n'est plus debloque."
+  leave_confirmed: "{prefix}&aTu as quitte &e{job}&a. Progression remise a zero."
+  cooldown: "{prefix}&cTu dois attendre encore &e{time} &cavant de changer/quitter un job."
+
+# ─── Niveau Maximum ─────────────────────────────────────────
+# reached   : message quand le joueur atteint le max_level de son job.
+#             Placeholder : {prefix} {job}
+# gui_badge : texte affiché dans le GUI Kgui à la place de la barre d'XP si niveau max.
+#             Exemple : "§6§l★ NIVEAU MAX ★" affiché sur l'icône du job.
+job_max_level:
+  reached: "{prefix}§6§lNiveau maximum atteint pour §b{job}§6 !"
+  gui_badge: "§6§l★ NIVEAU MAX ★"
+
+# ─── Divers ─────────────────────────────────────────────────
+misc:
+  # Utilisé par SlotManager.requestJobChange() si permission manquante.
+  no_permission: "{prefix}§cTu n'as pas la permission."
+  # Affiché quand le joueur tape /jobs sans avoir de métier assigné.
+  no_job_yet: "{prefix}§7Tu n'as pas encore de métier. Utilise §e/jobs §7pour en choisir un !"
+
+# ─── Retours de commandes ───────────────────────────────────
+# no_permission  : permission manquante (ex : joueur normal tentant /kjobs).
+# player_not_found : joueur introuvable (hors ligne ou faute de frappe).
+# reload_success : confirmation de /kjobs reload.
+# job_not_found  : job_id inconnu — {list} = liste des IDs valides séparés par virgule.
+# admin_xp_given : confirmation de /kjobs xp give <joueur> <job> <quantité>.
+#                  Placeholders : {prefix} {xp} {player} {job}
+commands:
+  no_permission: "{prefix}§cTu n'as pas la permission."
+  player_not_found: "{prefix}&cJoueur introuvable ou hors ligne: &e{player}"
+  reload_success: "{prefix}&aConfigs et jobs recharges avec succes."
+  job_not_found: "{prefix}§cJob '{job}' introuvable. Jobs disponibles : {list}"
+  admin_xp_given: "{prefix}§a{xp} XP ajoutés à {player} pour le job {job}."
+
+# --- Commande joueur /jobs ---------------------------------------------------
+# Ces messages pilotent le fallback texte joueur avant les GUI internes.
+# Placeholders disponibles selon la ligne: {prefix}, {job}, {job_id}, {status},
+# {level}, {max_level}, {xp}, {xp_next}, {percent}, {unlocked}, {slots},
+# {max_slots}, {global_level}.
+player_command:
+  player_only: "Cette commande est reservee aux joueurs."
+  data_not_loaded: "{prefix}&cDonnees non chargees, reessaie dans un instant."
+  job_unknown: "{prefix}&cJob inconnu: &e{job_id}"
+  menu:
+    header: "&6&l====== KjobsUltimate ======"
+    summary: "&7Jobs debloques: &e{unlocked}&7/&e{slots} &8(max {max_slots}) &7| Global: &e{global_level}"
+    favorite: "&7Favori: &e{job}"
+    none: "aucun"
+    status_unlocked: "&a[debloque]"
+    status_locked: "&8[bloque]"
+    status_favorite: "&6[favori]"
+    job_line: "&e{job} {status} &7Niv &f{level} &8- &a{xp}&7/&a{xp_next} XP"
+    commands: "&8Commandes: &e/jobs join <job> &8| &e/jobs select <job> &8| &e/jobs leave <job>"
+  join:
+    usage: "{prefix}&7Usage: &e/jobs join <job>"
+    already_unlocked: "{prefix}&7Ce job etait deja debloque."
+    no_free_slot: "{prefix}&cAucun emplacement libre. Monte ton niveau global pour debloquer un nouveau job."
+    global_level: "{prefix}&7Niveau global actuel: &e{global_level}"
+    unlocked: "{prefix}&aJob debloque: &e{job}"
+  favorite:
+    usage: "{prefix}&7Usage: &e/jobs select <job>"
+    must_unlock: "{prefix}&cTu dois d'abord debloquer ce job avec &e/jobs join {job_id}&c."
+  leave:
+    usage: "{prefix}&7Usage: &e/jobs leave <job>"
+  info:
+    header: "&6&l====== Tes jobs ======"
+    detail_header: "&6&l{job}"
+    status: "&7Statut: {status}"
+    status_unlocked: "&adebloque"
+    status_locked: "&8bloque"
+    level: "&7Niveau: &e{level}&7/&e{max_level}"
+    xp: "&7XP: &a{xp}&7/&a{xp_next} &8({percent}%)"
+    job_line: "&e{job} &7Niv &f{level} &8- &a{xp}&7/&a{xp_next} &8- {status}"
+  top:
+    global_name: "global"
+    loading: "{prefix}&7Chargement du classement &e{target}&7..."
+    invalid_filter: "{prefix}&cClassement inconnu: &e{job_id}"
+    error: "{prefix}&cImpossible de charger le classement pour le moment."
+    header: "&6&l====== Top {target} ====== &8({count})"
+    line: "&e#{position} &f{name} &8- &7Niv &a{level} &8- &7XP &b{xp}"
+    empty: "{prefix}&7Aucune donnee de classement pour le moment."
+    own_rank: "{prefix}&7Ton classement {target}: &e{rank}"
+    unranked: "non classe"
+  help:
+    lines:
+      - "&6&l====== Commandes Jobs ======"
+      - "&e/jobs &8- &7resume de tes jobs"
+      - "&e/jobs join <job> &8- &7debloque un job si tu as une place"
+      - "&e/jobs select <job> &8- &7definit le job favori"
+      - "&e/jobs leave <job> &8- &7quitte un job avec confirmation"
+      - "&e/jobs info [job] &8- &7affiche les infos"
+      - "&e/jobs top [global|job] &8- &7affiche le classement"
+      - "&e/jobs hud [bossbar|actionbar|on|off] &8- &7regle l'affichage jobs"
+# --- Commande admin /kjobs ---------------------------------------------------
+# Placeholders selon message: {prefix}, {player}, {job}, {job_id}, {list},
+# {value}, {amount}, {level}, {max_level}, {xp}, {multiplier}, {max_slots}, {nms}, {enabled}, {error}.
+admin_command:
+  player_data_not_loaded: "{prefix}&cDonnees joueur non chargees pour &e{player}&c."
+  usage:
+    addxp: "&c&7Usage: /kjobs addxp <joueur> <jobId> <+/-montant>"
+    resetxp: "&c&7Usage: /kjobs resetxp <joueur> [jobId]"
+    setlvl: "&c&7Usage: /kjobs setlvl <joueur> <jobId> <niveau>"
+    resetjob: "&c&7Usage: /kjobs resetjob <joueur>"
+    setdisplay: "&c&7Usage: /kjobs setdisplay <joueur> <jobId>"
+    forcejoin: "&c&7Usage: /kjobs forcejoin <joueur> <jobId> [slot]"
+    forceleave: "&c&7Usage: /kjobs forceleave <joueur> <jobId>"
+    clearcooldown: "&c&7Usage: /kjobs clearcooldown <joueur>"
+    bonus: "&c&7Usage: /kjobs bonus <joueur> <jobId|all> <valeur>"
+    questcomplete: "&c&7Usage: /kjobs questcomplete <joueur> <questId>"
+    questreset: "&c&7Usage: /kjobs questreset <joueur> <questId|all>"
+  invalid:
+    amount: "{prefix}&cMontant invalide: &e{value}"
+    level: "{prefix}&cNiveau invalide: &e{value}"
+    level_range: "{prefix}&cNiveau hors limites (0-{max_level})."
+    value: "{prefix}&cValeur invalide: &e{value}"
+    negative_multiplier: "{prefix}&cLe multiplicateur ne peut pas etre negatif."
+    slot: "{prefix}&cSlot invalide: &e{value}"
+    slot_range: "{prefix}&cSlot hors limites (1-{max_slots})."
+  reload:
+    error: "{prefix}&cErreur lors du rechargement: {error}"
+  quest:
+    unknown: "{prefix}&cQuete '&e{quest_id}&c' introuvable. Quetes disponibles : &7{list}"
+    disabled: "{prefix}&cLe systeme de quetes est desactive ou non initialise."
+  questcomplete:
+    done: "{prefix}&aQuete &f{quest} &7rendue claimable pour &e{player}&7."
+    error: "{prefix}&cImpossible de completer la quete &e{quest_id}&c pour &e{player}&c."
+  questreset:
+    done: "{prefix}&aQuete &f{quest} &7reset pour &e{player}&7."
+    all: "{prefix}&a{count} quete(s) reset pour &e{player}&7."
+    error: "{prefix}&cImpossible de reset la quete &e{quest_id}&c pour &e{player}&c."
+  xp:
+    modified: "{prefix}&aXP de &e{player} &7en &e{job_id} &7modifie - niveau &f{level} &7- &f{xp} &7XP"
+  level:
+    set: "{prefix}&aNiveau de &e{player} &7en &e{job_id} &7defini a &f{level}"
+  resetjob:
+    done: "{prefix}&aJobs de &e{player} &7remis a zero."
+  display:
+    set: "{prefix}&aJob actif de &e{player} &7defini a &e{job}"
+  event:
+    current: "{prefix}&aMultiplicateur XP event actuel: &ex{multiplier}"
+    set: "{prefix}&aMultiplicateur XP event defini a &ex{multiplier}&7 (tous les joueurs, tous les jobs)."
+  bonus:
+    set: "{prefix}&aBonus multiplier de &e{player}&7 pour &e{job_id}&7 -> &fx{multiplier}"
+  forcejoin:
+    already: "{prefix}&a{player} avait deja ce job. Favori mis a jour."
+    no_slot: "{prefix}&cAucun slot libre. Utilise /kjobs forcejoin <joueur> <jobId> <slot> pour remplacer."
+    done: "{prefix}&aJob &e{job} &7force pour &e{player}&7."
+  forceleave:
+    not_unlocked: "{prefix}&cCe joueur n'a pas debloque ce job."
+    done: "{prefix}&aJob &e{job} &7retire de &e{player}&7, progression reset."
+  cooldown:
+    cleared: "{prefix}&aCooldown jobs retire pour &e{player}&7."
+  resetxp:
+    job: "{prefix}&aXP de &e{player} &7en &e{job_id} &7remis a &f0&7."
+    all: "{prefix}&aXP de &e{player} &7remis a &f0 &7pour tous les jobs."
+  testhud:
+    player_only: "{prefix}&c/kjobs testhud reserve aux joueurs en jeu."
+    hud_null: "&c[TESTHUD] HudManager est NULL - le HUD n'a pas ete initialise !"
+    hud_ok: "&a[TESTHUD] HudManager OK - NMS version: {nms}"
+    data_null: "&c[TESTHUD] PlayerData NULL - donnees non chargees !"
+    data_ok: "&a[TESTHUD] PlayerData OK | HUD active: {enabled}"
+    invalid_arg: "&c[TESTHUD] Argument ignore: {arg} &7(types: wither/dragon, positions: below/above/front/eye_front/player, visible/invisible)"
+    bossbar_ok: "&a[TESTHUD] BossBar envoyee a 75% &7(type={type}, position={position}, visible={visible}) &8- &7auto-hide selon hud.yml"
+    bossbar_error: "&c[TESTHUD] testBossBar ERREUR: {error}"
+    levelup_ok: "&a[TESTHUD] onLevelUp OK - popup achievement devrait s'afficher"
+    levelup_error: "&c[TESTHUD] onLevelUp ERREUR: {error}"
+    console_hint: "&7Consulte la console pour les erreurs [HUD] si rien n'apparait."
+  status:
+    lines:
+      - "&8----------------------------------------"
+      - "&6&l KjobsUltimate &7- Status"
+      - "&8----------------------------------------"
+      - "&7Version: &f{version} &8| &7Online: &f{online}/{max_online}"
+      - "&7Storage: {storage_status} &f{storage_type} &8- &7{storage_path}"
+      - "&7MySQL pool: &f{pool_status}"
+      - "&7Jobs: &f{jobs_loaded}/{jobs_expected} &8- &7{jobs}"
+      - "&7Players cache: &f{cache_size}"
+      - "&7Hooks: &f{hooks}"
+      - "&7GUI: {gui_status} &8| &7HUD: {hud_status} &8| &7Tab: {tab_status}"
+      - "&7Tab virtuel: {virtual_tab_status}"
+      - "&7XP: event x{event_multiplier} &8| &7debug={debug} xp={debug_xp} hud={debug_hud}"
+      - "&8----------------------------------------"
+  help:
+    lines:
+      - "&8----------------------------------------"
+      - "&6&l KjobsUltimate &7- Commandes Staff"
+      - "&8----------------------------------------"
+      - "&e/kjobs status &7- diagnostic plugin"
+      - "&e/kjobs reload"
+      - "&e/kjobs addxp &f<joueur> <jobId> <+/-montant>"
+      - "&e/kjobs resetxp &f<joueur> [jobId]"
+      - "&e/kjobs setlvl &f<joueur> <jobId> <niveau>"
+      - "&e/kjobs resetjob &f<joueur>"
+      - "&e/kjobs setdisplay &f<joueur> <jobId>"
+      - "&e/kjobs forcejoin &f<joueur> <jobId> [slot]"
+      - "&e/kjobs forceleave &f<joueur> <jobId>"
+      - "&e/kjobs clearcooldown &f<joueur>"
+      - "&e/kjobs event &f<multiplicateur>"
+      - "&e/kjobs bonus &f<joueur> <jobId|all> <multiplicateur>"
+      - "&e/kjobs testhud &f[wither|dragon] [below|above|front|eye_front|player] [visible|invisible]"
+      - "&e/kjobs tabdebug &7[joueur] - diagnostic tab virtuel"
+      - "&e/kjobs tabrender &7[joueur] - preview lignes tab virtuel"
+      - "&e/kjobs tabclear &7[joueur] - retire les lignes fake du joueur"
+      - "&8----------------------------------------"
+      - "&7Aliases : /kjob /kjobadmin /kjobadm"
+  tabdebug:
+    no_tab: "{prefix}&cTabManager non initialise."
+  tabrender:
+    usage: "{prefix}&cUsage console: /kjobs tabrender <joueur>"
+  tabclear:
+    usage: "{prefix}&cUsage console: /kjobs tabclear <joueur>"
+    done: "{prefix}&aLignes fake du tab virtuel retirees pour &e{player}&a."
+  tabclearall:
+    done: "{prefix}&aToutes les lignes fake du tab virtuel ont ete retirees."

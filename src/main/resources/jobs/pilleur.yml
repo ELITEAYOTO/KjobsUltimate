@@ -1,0 +1,75 @@
+# ============================================================
+# KjobsUltimate - Job : Pilleur
+# ============================================================
+# V1 preparation: les listeners TNT/dynamite seront ajoutes dans la prochaine phase.
+# Sources prevues:
+# - explosion de TNT posee par le joueur
+# - explosion de dynamite custom
+# - craft de TNT
+# - craft de dynamite custom via Kcraft
+
+display_name: "§5Pilleur"
+description: "§7Gagne de l'XP en pillant avec TNT et dynamite."
+icon:
+  material: TNT
+  nbt_cit: "job_pilleur_icon"
+max_level: 50
+
+xp_curve:
+  type: linear
+  fallback_type: linear
+  fallback_base: 800
+  fallback_multiplier: 1.24
+  custom_levels:
+    1: 800
+    2: 1200
+    3: 1700
+    4: 2300
+    5: 3100
+    6: 4100
+    7: 5400
+    8: 7000
+    9: 9000
+    10: 11500
+
+daily_xp_cap: 0
+
+bossbar:
+  color: PURPLE
+  style: SEGMENTED_10
+
+level_rewards:
+  5:
+    - "[command] eco give {player} 500"
+  10:
+    - "[command] eco give {player} 2000"
+    - "[command] broadcast §5{player} §fpasse §5niveau 10 §fPilleur !"
+  25:
+    - "[command] eco give {player} 10000"
+  50:
+    - "[command] eco give {player} 50000"
+    - "[command] broadcast §5{player} §fa atteint le §5niveau MAXIMUM §fdu job Pilleur !"
+
+actions:
+  TNT_EXPLODE:
+    xp: 12
+    money: 0
+    silktouch: false
+    limit_key: tnt_xp_limit
+  DYNAMITE_EXPLODE:
+    xp: 20
+    money: 0
+    silktouch: false
+    nbt:
+      sparrowmc-item: "dynamite"
+  TNT_CRAFT:
+    xp: 8
+    money: 0
+    silktouch: false
+    material: TNT
+  DYNAMITE_CRAFT:
+    xp: 15
+    money: 0
+    silktouch: false
+    nbt:
+      sparrowmc-item: "dynamite"
