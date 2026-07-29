@@ -1,6 +1,6 @@
 # KjobUltimate — Index et Vue d'Ensemble
 
-> Plugin de jobs 100% configurable pour SparrowMC (KhopeSpigot 1.8.8)
+> Plugin de jobs 100% configurable pour Volkaria (KhopeSpigot 1.8.8)
 > Version cible : 1.0.0 | Java 8 | Maven
 
 ---
