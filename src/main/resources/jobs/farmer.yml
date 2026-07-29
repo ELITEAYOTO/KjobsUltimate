@@ -1,0 +1,151 @@
+# ============================================================
+# KjobsUltimate — Job : Farmer
+# ============================================================
+#
+# GUIDE DE CONFIGURATION D'UN JOB
+# ─────────────────────────────────────────────────────────────
+# Voir jobs/mineur.yml pour la documentation complète de tous les champs.
+# Recharger à chaud : /kjobs reload
+#
+# NOTES SPÉCIFIQUES AU FARMER
+# ─────────────────────────────────────────────────────────────
+# MATURITÉ DES CULTURES (anti_abuse.crops_mature_only: true dans config.yml)
+#   XP accordé UNIQUEMENT si la culture est à maturité complète.
+#   Empêche le farm en plantant et récoltant des jeunes plants en boucle.
+#   Cultures supportées (vérifiées par CropUtil.java) :
+#     WHEAT        → stage MAX (7/7)
+#     CARROT       → stage MAX (7/7)
+#     POTATO       → stage MAX (7/7)
+#     MELON_BLOCK  → toujours considéré mûr (bloc entier)
+#     PUMPKIN      → toujours considéré mûr (bloc entier)
+#     SUGAR_CANE_BLOCK → toujours (pas de stage)
+#     CACTUS       → toujours (pas de stage)
+#     NETHER_WARTS → stage MAX (3/3) — clé correcte en Bukkit 1.8.8 (NETHER_WARTS avec S)
+#     COCOA        → stage MAX (2/2)
+#     LOG / LOG_2  → toujours (pas de stage)
+#
+# SILK TOUCH (silktouch: false recommandé pour les cultures)
+#   Les cultures ne nécessitent pas de bloquer Silk Touch.
+#   silktouch: false = XP accordé même si Silk Touch actif.
+#
+# COOLDOWN ANTI-FARM POSITION (block_position_cooldown dans config.yml)
+#   Après chaque récolte, la position est mise en cooldown.
+#   Un joueur ne peut pas récolter le même emplacement indéfiniment.
+#   Les cultures replantées doivent repousser avant de donner à nouveau XP.
+
+display_name: "§aFarmer"
+description: "§7Cultive la terre et récolte les ressources naturelles."
+icon:
+  material: WHEAT
+  nbt_cit: "job_farmer_icon"
+max_level: 50
+
+xp_curve:
+  type: custom
+  fallback_type: linear
+  fallback_base: 800
+  fallback_multiplier: 1.25
+  custom_levels:
+    1: 800
+    2: 1200
+    3: 1800
+    4: 2500
+    5: 3500
+    6: 4800
+    7: 6500
+    8: 8500
+    9: 11000
+    10: 14000
+
+daily_xp_cap: 0
+
+bossbar:
+  color: GREEN
+  style: SOLID
+
+level_rewards:
+  5:
+    - "eco give {player} 300"
+  10:
+    - "eco give {player} 1000"
+    - "broadcast §a{player} §fpasse §aniveau 10 §fFarmer !"
+  25:
+    - "eco give {player} 6000"
+  50:
+    - "eco give {player} 30000"
+    - "broadcast §a{player} §fa atteint le §aniveau MAXIMUM §fdu job Farmer !"
+
+# ─────────────────────────────────────────────────────────────
+# ACTIONS DU FARMER : cultures à récolter pour gagner XP + argent
+# ─────────────────────────────────────────────────────────────
+# Déclenché par BlockBreakEvent sur une culture. Clé = Material Bukkit 1.8.8.
+# Maturité obligatoire si anti_abuse.crops_mature_only: true (vérifié par CropUtil).
+#
+# silktouch: false recommandé pour TOUTES les cultures.
+# Les cultures n'ont pas de Silk Touch pertinent (pas de drop spécial).
+#
+# Cultures disponibles en Bukkit 1.8.8 :
+#   WHEAT            → blé (stage 0–7, maturité = 7)
+#   CARROT           → carottes (stage 0–7, maturité = 7)
+#   POTATO           → pommes de terre (stage 0–7, maturité = 7)
+#   MELON_BLOCK      → bloc de pastique complet
+#   PUMPKIN          → bloc de citrouille complet
+#   SUGAR_CANE_BLOCK → canne à sucre (pas de stage, XP au cassage)
+#   CACTUS           → cactus (pas de stage, XP au cassage)
+#   NETHER_WARTS     → verrues du Nether (stage 0–3, maturité = 3)
+#                      Attention : clé correcte = NETHER_WARTS (avec S)
+#   COCOA            → fèves de cacao (stage 0–2, maturité = 2)
+#   LOG / LOG_2      → bois (si le Farmer coupe aussi du bois)
+actions:
+  WHEAT:
+    xp: 10
+    money: 0
+    silktouch: false
+  CARROT:
+    xp: 10
+    money: 0
+    silktouch: false
+  POTATO:
+    xp: 10
+    money: 0
+    silktouch: false
+  MELON_BLOCK:
+    xp: 8
+    money: 0
+    silktouch: false
+  PUMPKIN:
+    xp: 12
+    money: 0
+    silktouch: false
+  SUGAR_CANE_BLOCK:
+    xp: 5
+    money: 0
+    silktouch: false
+  CACTUS:
+    xp: 5
+    money: 0
+    silktouch: false
+  NETHER_WARTS:
+    xp: 15
+    money: 0
+    silktouch: false
+  COCOA:
+    xp: 8
+    money: 0
+    silktouch: false
+  LOG:
+    xp: 6
+    money: 0
+    silktouch: false
+  LOG_2:
+    xp: 6
+    money: 0
+    silktouch: false
+  LEAVES:
+    xp: 1
+    money: 0
+    silktouch: false
+  LEAVES_2:
+    xp: 1
+    money: 0
+    silktouch: false

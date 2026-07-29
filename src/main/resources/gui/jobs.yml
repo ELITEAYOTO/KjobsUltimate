@@ -1,0 +1,156 @@
+title: "&6Choix des jobs"
+size: 54
+
+filler:
+  enabled: true
+  material: STAINED_GLASS_PANE
+  data: 15
+  name: " "
+  lore: []
+
+job_slots:
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 15
+
+job_item:
+  # material/data/CIT viennent par defaut de jobs/<job>.yml -> icon.
+  # Un template peut utiliser use_job_icon: false ou surcharger job_icon.*.
+  locked:
+    material: BOOK
+    name: "&8{job}"
+    lore:
+      - "&7Statut: {status}"
+      - "&7Niveau: &e{level}&7/&e{max_level}"
+      - "&7XP: &a{xp}&7/&a{xp_next}"
+      - ""
+      - "&aClique pour voir les details."
+    click_actions:
+      - "[sound] CLICK 1.0 1.0"
+      - "[open] detail:{job_id}"
+  unlocked:
+    material: ENCHANTED_BOOK
+    name: "&a{job}"
+    lore:
+      - "&7Statut: {status}"
+      - "&7Niveau: &e{level}&7/&e{max_level}"
+      - "&7XP: &a{xp}&7/&a{xp_next} &8({percent}%)"
+      - ""
+      - "&aClique pour voir les details."
+    click_actions:
+      - "[sound] CLICK 1.0 1.0"
+      - "[open] detail:{job_id}"
+  favorite:
+    material: NETHER_STAR
+    name: "&6{job}"
+    lore:
+      - "&7Statut: {status}"
+      - "&7Niveau: &e{level}&7/&e{max_level}"
+      - "&7XP: &a{xp}&7/&a{xp_next} &8({percent}%)"
+      - ""
+      - "&aClique pour voir les details."
+    click_actions:
+      - "[sound] CLICK 1.0 1.0"
+      - "[open] detail:{job_id}"
+
+items:
+  back:
+    slot: 49
+    material: ARROW
+    name: "&eRetour"
+    lore:
+      - "&7Retour au menu principal."
+    click_actions:
+      - "[sound] CLICK 1.0 1.0"
+      - "[open] home"
+
+detail:
+  title: "&6{job}"
+  size: 27
+  filler:
+    enabled: true
+    material: STAINED_GLASS_PANE
+    data: 15
+    name: " "
+    lore: []
+  items:
+    info:
+      slot: 13
+      material: BOOK
+      name: "&6{job}"
+      lore:
+        - "&7ID: &f{job_id}"
+        - "&7Statut: {status}"
+        - "&7Niveau: &e{level}&7/&e{max_level}"
+        - "&7XP: &a{xp}&7/&a{xp_next} &8({percent}%)"
+        - "&7Global: &e{global_level}"
+    action:
+      locked:
+        slot: 11
+        material: STAINED_CLAY
+        data: 5
+        name: "&aDebloquer"
+        lore:
+          - "&7Debloquer &e{job}&7."
+          - "&7Utilise un slot disponible."
+        click_actions:
+          - "[sound] CLICK 1.0 1.0"
+          - "[unlock] {job_id}"
+        click_requirements:
+          - "job_locked: {job_id}"
+        deny_actions:
+          - "[sound] VILLAGER_NO 1.0 1.0"
+          - "[message] {prefix}&cCe job est deja debloque."
+        cooldown: 1
+      unlocked:
+        slot: 11
+        material: NETHER_STAR
+        name: "&eDefinir favori"
+        lore:
+          - "&7Met &e{job} &7comme favori."
+        click_actions:
+          - "[sound] CLICK 1.0 1.0"
+          - "[favorite] {job_id}"
+        click_requirements:
+          - "job_unlocked: {job_id}"
+        deny_actions:
+          - "[sound] VILLAGER_NO 1.0 1.0"
+          - "[message] {prefix}&cTu dois debloquer ce job avant de le mettre en favori."
+        cooldown: 1
+      favorite:
+        slot: 11
+        material: NETHER_STAR
+        name: "&6Deja favori"
+        lore:
+          - "&7Ce job est deja ton favori."
+        click_actions:
+          - "[sound] CLICK 1.0 1.0"
+          - "[favorite] {job_id}"
+    leave:
+      slot: 15
+      material: BARRIER
+      name: "&cQuitter {job}"
+      lore:
+        - "&cReset toute la progression."
+        - "&7Une confirmation sera demandee."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[leave_confirm] {job_id}"
+      click_requirements:
+        - "job_unlocked: {job_id}"
+      deny_actions:
+        - "[sound] VILLAGER_NO 1.0 1.0"
+        - "[message] {prefix}&cTu ne peux pas quitter un job non debloque."
+      cooldown: 1
+    back:
+      slot: 22
+      material: ARROW
+      name: "&eRetour"
+      lore:
+        - "&7Retour a la liste des jobs."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[open] jobs"

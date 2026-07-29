@@ -1,0 +1,153 @@
+# ============================================================
+# KjobsUltimate - Quetes permanentes V1
+# ============================================================
+#
+# Objectif V1:
+# - quetes permanentes, pas de daily/weekly/reset automatique;
+# - progression sauvegardee en SQLite/MySQL;
+# - une recompense claimable une seule fois;
+# - le GUI de claim sera branche sur QuestManager.claimReward().
+#
+# Types supportes:
+#   MINE              target = Material casse par le mineur
+#   HARVEST           target = Material recolte par farmer
+#   KILL              target = EntityType tue par hunter
+#   CRAFT             target = Material craft par artisan
+#   PVP_KILL          target = PLAYER ou *
+#   TNT_EXPLODE       target = TNT ou *
+#   DYNAMITE_EXPLODE  target = DYNAMITE ou *
+#   TNT_CRAFT         target = TNT ou *
+#   DYNAMITE_CRAFT    target = DYNAMITE ou *
+#   EAT               target = Material consomme (ex: COOKED_BEEF, GOLDEN_APPLE)
+#   CONSUME           alias large de EAT, target = Material consomme
+#   SMELT             target = Material retire d'un four (ex: IRON_INGOT)
+#   FISH              target = Material peche ou EntityType attrape
+#   FISH_ENTITY       target = EntityType attrape avec la canne
+#   ENCHANT           target = Material enchante
+#   ENCHANT_LEVELS    target = Material enchante, amount = niveaux consommes
+#   PLACE             target = Material pose
+#   TAME              target = EntityType apprivoise (ex: WOLF, OCELOT, HORSE)
+#
+# Notes creation:
+# - target: "*" accepte tout pour ce type.
+# - Les Material/EntityType doivent rester en noms Bukkit 1.8.8.
+# - Une quete sans `chain` reste une chaine autonome retrocompatible.
+# - Une suite declare sa chaine dans `chains:`, puis `chain` et `stage`
+#   sur chaque quete. Les etapes doivent etre uniques et contigues (1, 2, 3).
+# - Une seule etape progresse par chaine et par action. Plusieurs chaines
+#   distinctes peuvent progresser simultanement.
+#
+# Recompenses:
+#   rewards.xp       = XP de job donne au claim
+#   rewards.commands = commandes executees au claim
+# Placeholders commandes: {player}, {uuid}, {quest}, {quest_id}, {job}
+# Prefixes commandes: [console], [command], [player], [joueur]
+
+enabled: true
+
+chains:
+  mineur_stone:
+    display_name: "&bSuite Pierre"
+    job: mineur
+  farmer_wheat:
+    display_name: "&aSuite Ble"
+    job: farmer
+
+quests:
+  mineur_stone_1:
+    display_name: "&bMineur I &8- &7Pierre"
+    job: mineur
+    type: MINE
+    target: STONE
+    chain: mineur_stone
+    stage: 1
+    amount: 250
+    min_level: 0
+    rewards:
+      xp: 500
+      commands:
+        - "[console] give {player} tripwire_hook 1"
+
+  farmer_wheat_1:
+    display_name: "&aFarmer I &8- &7Ble"
+    job: farmer
+    type: HARVEST
+    target: CROPS
+    chain: farmer_wheat
+    stage: 1
+    amount: 150
+    min_level: 0
+    rewards:
+      xp: 400
+      commands:
+        - "[console] give {player} tripwire_hook 1"
+
+  hunter_zombie_1:
+    display_name: "&2Chasseur I &8- &7Zombies"
+    job: hunter
+    type: KILL
+    target: ZOMBIE
+    amount: 75
+    min_level: 0
+    rewards:
+      xp: 450
+      commands:
+        - "[console] give {player} tripwire_hook 1"
+
+  pretorien_pvp_1:
+    display_name: "&cPretorien I &8- &7Combats"
+    job: pretorien
+    type: PVP_KILL
+    target: PLAYER
+    amount: 10
+    min_level: 0
+    rewards:
+      xp: 600
+      commands:
+        - "[console] give {player} tripwire_hook 1"
+
+  artisan_craft_1:
+    display_name: "&6Artisan I &8- &7Crafts"
+    job: artisan
+    type: CRAFT
+    target: "*"
+    amount: 100
+    min_level: 0
+    rewards:
+      xp: 500
+      commands:
+        - "[console] give {player} tripwire_hook 1"
+
+  pilleur_tnt_1:
+    display_name: "&4Pilleur I &8- &7TNT"
+    job: pilleur
+    type: TNT_EXPLODE
+    target: TNT
+    amount: 64
+    min_level: 0
+    rewards:
+      xp: 700
+      commands:
+        - "[console] give {player} tripwire_hook 1"
+
+  artisan_smelter_1:
+    display_name: "&6Artisan I &8- &7Fonte"
+    job: artisan
+    type: SMELT
+    target: IRON_INGOT
+    amount: 64
+    min_level: 0
+    rewards:
+      xp: 350
+      commands: []
+
+  hunter_food_1:
+    display_name: "&2Chasseur I &8- &7Repas"
+    job: hunter
+    type: EAT
+    target: COOKED_BEEF
+    amount: 16
+    min_level: 0
+    rewards:
+      xp: 150
+      commands: []

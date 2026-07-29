@@ -1,0 +1,245 @@
+# ============================================================
+# KjobsUltimate — HUD : BossBar + ActionBar + Achievement Popup
+# ============================================================
+#
+# ARCHITECTURE HUD
+# ─────────────────────────────────────────────────────────────
+# 1) BossBar (NMS fake wither en 1.8.8)
+#    Technique : PacketPlayOutSpawnEntityLiving (wither fantome invisible)
+#                + PacketPlayOutUpdateHealth (contrôle la largeur de la barre).
+#    Visible en haut de l'écran. Chaque joueur a son propre wither fantome.
+#
+# 2) ActionBar
+#    Technique : PacketPlayOutChat (position 2 = hotbar message).
+#    Visible en bas de l'écran au-dessus de l'inventaire.
+#    Disparaît automatiquement après display_duration secondes.
+#
+# 3) Achievement Popup (level up)
+#    Technique : PacketPlayOutTitle (TITLE + SUBTITLE + TIMES).
+#    Popup centré lors d'un level up avec fade_in/stay/fade_out.
+#
+# PLACEHOLDERS DISPONIBLES
+# ─────────────────────────────────────────────────────────────
+# {job}       → display_name du job actif
+# {level}     → niveau courant dans ce job
+# {xp}        → XP courant dans le niveau
+# {xp_next}   → XP requis pour passer au niveau suivant
+# {percent}   → progression dans le niveau (0–100)
+# {xp_gained} → XP gagnés lors de la dernière action (ActionBar uniquement)
+# ─────────────────────────────────────────────────────────────
+
+# ─── BossBar (fake wither NMS) ──────────────────────────────
+bossbar:
+  # Activer/désactiver la bossbar pour tous les joueurs.
+  # false = aucun paquet NMS envoyé, le wither fantome n'est jamais créé.
+  enabled: true
+
+  # Délai en secondes sans gain XP avant que la bossbar disparaisse.
+  # 0 = la bossbar reste toujours visible (même sans action en cours).
+  # 8 = elle disparaît 8 secondes après le dernier gain XP.
+  # Recommandé : 5–15 secondes selon la fréquence d'action du job.
+  bossbar_timing_reset: 8
+
+  # Duree d'affichage de /kjobs testhud, en secondes.
+  # Evite de laisser une bossbar de test packet-only collee au joueur apres un diagnostic.
+  test_duration_seconds: 8
+
+  # Format du titre affiché dans la bossbar.
+  # Placeholders : {job} {level} {xp} {xp_next} {percent}
+  # Exemples de formats :
+  #   "§b{job} §7Lv.§e{level} §8| §a{xp}§8/§a{xp_next} §7XP"     ← défaut
+  #   "§e{job} §7— §aniveau §e{level} §8[§7{percent}%§8]"           ← alternatif compact
+  #   "{job} §7{xp}§8/§7{xp_next} §7XP §8(§e{percent}%§8)"         ← sans niveau
+  title_format: "§b{job} §7Lv.§e{level} §8| §a{xp}§8/§a{xp_next} §7XP"
+
+  # Format affiché quand le joueur est au niveau maximum du job.
+  # Exemples :
+  #   "§b{job} §7Lv.§e{level} §8| §6§lMAX"                          ← défaut
+  #   "§6§l✦ {job} §7NIVEAU MAX §6§l✦"                               ← festif
+  #   "§a{job} §7— §6MAX LEVEL §e({level})"                         ← informatif
+  title_format_max_level: "§b{job} §7Lv.§e{level} §8| §6MAX"
+
+  # Fréquence de rafraîchissement de la bossbar (en ticks Bukkit).
+  # 20 ticks = 1 seconde réelle. Recommandations :
+  #   20  (1s)  = très réactif, charge CPU plus élevée (600 joueurs : vigilance)
+  #   40  (2s)  = bon équilibre réactivité / performance  ← défaut
+  #   60  (3s)  = économique sur serveurs chargés
+  #   100 (5s)  = faible charge, mise à jour perceptible
+  update_interval_ticks: 40
+
+  # Position du faux Wither utilise pour la bossbar 1.8.
+  # IMPORTANT: il doit rester proche du joueur. Trop loin (ex: Y + 1000) = bossbar invisible.
+  # position_mode:
+  #   BELOW     = sous le joueur, discret, mais certains clients 1.8 ignorent la bossbar si le boss est occlus.
+  #   ABOVE     = au-dessus du joueur, utile si BELOW est dans des blocs.
+  #   FRONT     = devant le joueur a hauteur du corps, meilleur test de rendu client.
+  #   EYE_FRONT = devant le regard exact du joueur, utile pour verifier si le client doit "voir" le boss.
+  #   PLAYER    = sur le joueur, diagnostic seulement.
+  # FRONT est le profil conseille pour Panda/KhopeSpigot 1.8.8 si BELOW n'affiche rien.
+  position_mode: FRONT
+
+  # Valeur recommandee: -30 avec position_mode BELOW, le boss reste sous le joueur.
+  entity_offset_y: -30.0
+
+  # Decalage dans la direction du regard du joueur.
+  # 0 = aucun decalage horizontal pour BELOW/ABOVE/PLAYER.
+  # Pour FRONT/EYE_FRONT, 0 utilise automatiquement 24 blocs de distance.
+  # 24 = distance explicite conseillee pour garder le boss proche mais hors contact joueur.
+  entity_forward_offset: 24.0
+
+  # true = envoie PacketPlayOutEntityTeleport pendant les refresh pour garder le fake Wither proche.
+  # Recommande en prod sinon la bossbar peut disparaitre quand le joueur s'eloigne du point de spawn.
+  follow_player: true
+
+  # true = appelle setInvisible(true) sur le faux Wither.
+  # En prod, true evite d'afficher le Wither devant le joueur. Si la bossbar disparait,
+  # tester /kjobs testhud wither front visible pour confirmer que seul le flag invisible bloque.
+  invisible_entity: true
+
+  # Progression minimale affichee. 0.05 = minimum 5% pour eviter une barre totalement vide/invisible.
+  minimum_progress: 0.05
+
+  # Type de boss fake utilise pour la bossbar 1.8.
+  # WITHER = methode classique. ENDER_DRAGON = alternative utile si un fork/client ignore les Withers.
+  entity_type: WITHER
+
+  # Vie max utilisee pour calculer le pourcentage cote client.
+  # WITHER vanilla 1.8 = 300, ENDER_DRAGON vanilla 1.8 = 200.
+  # Laisser la valeur correspondant a entity_type.
+  max_health: 300.0
+
+# ─── ActionBar ──────────────────────────────────────────────
+actionbar:
+  # Activer/désactiver l'actionbar. false = aucun paquet PacketPlayOutChat envoyé.
+  enabled: true
+
+  # Format du message affiché dans l'actionbar après un gain XP.
+  # Placeholders : {job} {level} {xp} {xp_next} {xp_gained} {percent}
+  # {xp_gained} = XP accumulés dans la fenêtre accumulation_window_ms (voir ci-dessous).
+  # Exemples :
+  #   "§b{job} §7Lv.§e{level} §8| §a+{xp_gained} XP §8(§7{xp}§8/§7{xp_next}§8)"  ← défaut
+  #   "§a+{xp_gained} XP §7({job} Lv.§e{level}§7)"                                 ← compact
+  #   "§e{job} §8» §a+{xp_gained}xp §7| §e{percent}% §7vers niveau §e{level}"      ← verbeux
+  #   "§b+{xp_gained} §7XP §8[§a{xp}§8/§a{xp_next}§8] §7Lv.§e{level}"             ← barre
+  format: "§b{job} §7Lv.§e{level} §8| §a+{xp_gained} XP §8(§7{xp}§8/§7{xp_next}§8)"
+
+  # Durée d'affichage de l'actionbar en secondes après le dernier gain XP.
+  # L'actionbar disparaît automatiquement après cette durée (paquet vide envoyé).
+  # 1–2  = disparition rapide (ressemble à un flash de notification)
+  # 3    = durée standard, confortable à lire  ← défaut
+  # 5+   = reste longtemps visible même après l'action
+  display_duration: 3
+
+  # Fenêtre de temps en millisecondes pendant laquelle les XP successifs
+  # sont accumulés avant affichage. Évite le spam visuel quand un joueur
+  # casse plusieurs blocs très rapidement (clic maintenu, AFK miner...).
+  #
+  # Comportement :
+  #   200ms = accumulation très courte, affiche presque chaque gain séparément
+  #   800ms = accumulation de 0.8 seconde  ← défaut
+  #  2000ms = accumulation de 2 secondes (idéal pour farm rapide)
+  #
+  # Exemple avec accumulation_window_ms: 800 :
+  #   Joueur casse 4 blocs en 0.6s → 100+100+100+100 XP
+  #   Affiché en une fois : "+400 XP" au lieu de 4 messages successifs
+  accumulation_window_ms: 800
+
+# ─── Achievement Popup (level up) ───────────────────────────
+achievement:
+  # Activer/désactiver le popup de level up.
+  # false = aucun PacketPlayOutTitle envoyé lors d'un level up.
+  enabled: true
+
+  # Cooldown minimum en millisecondes entre deux popups successifs.
+  # Protège contre les rafales visuelles si le joueur gagne plusieurs niveaux
+  # d'un coup (commande admin /kjobs setlevel, XP boost événementiel...).
+  # 0     = aucun cooldown, tous les popups s'affichent en rafale
+  # 2000  = 2 secondes minimum entre deux popups  ← défaut
+  # 5000  = 5 secondes (confortable pour les gros sauts de niveau)
+  # Mode d'affichage level-up.
+  # TITLE = PacketPlayOutTitle uniquement.
+  # TITLE_AND_ACTIONBAR = title + fallback actionbar visible meme si le client ignore les titles.
+  # ACTIONBAR = actionbar uniquement.
+  # CHAT = message chat uniquement.
+  # TITLE_AND_CHAT / ACTIONBAR_AND_CHAT possibles.
+  # Defaut V1: TITLE_AND_CHAT pour garder un message visible sans forcer l'ActionBar XP.
+  mode: TITLE_AND_CHAT
+
+  # false = le message de level-up reste affiche meme si le joueur coupe le HUD jobs.
+  # true = /jobs hud off coupe aussi les notifications de level-up.
+  respect_hud_toggle: false
+
+  # true = si le mode actuel ne contient pas CHAT, le plugin envoie quand meme
+  # achievement.chat en fallback. Utile quand un ancien hud.yml est reste en TITLE_AND_ACTIONBAR.
+  force_chat_fallback: true
+
+  # Envoie PacketPlayOutTitle RESET avant TIMES/TITLE/SUBTITLE.
+  # Utile si un client/fork garde un ancien etat title corrompu.
+  reset_before_send: true
+
+  actionbar: "&6&lNIVEAU {level} &8- &b{job}"
+  chat: "&6&lNIVEAU {level} &8- &b{job}"
+
+  # Toast achievement vanilla 1.8 haut-droite.
+  # Limites: le texte et l'icone sont ceux de l'achievement vanilla, sauf override resource pack/lang.
+  # method:
+  #   BUKKIT = methode la plus fiable en 1.8. Elle retire/re-donne l'achievement pour forcer le toast.
+  #            Peut declencher les logs/messages vanilla "lost/earned achievement" selon le serveur.
+  #   PACKET = envoie PacketPlayOutStatistic uniquement. Plus propre, mais certains clients ne montrent pas le toast.
+  #   PACKET_THEN_BUKKIT = teste le packet puis force Bukkit apres quelques ticks.
+  # Le texte du toast se modifie via le resource pack/lang du client, pas via un paquet serveur.
+  # L'icone depend de l'achievement choisi; pour une vraie icone custom, override resource pack requis.
+  vanilla_toast:
+    enabled: true
+    method: BUKKIT
+    achievement: OPEN_INVENTORY
+    fallback_achievement: OPEN_INVENTORY
+    bukkit_after_packet_ticks: 2
+    force_reaward: true
+    restore_if_not_previously_awarded: true
+    restore_after_ticks: 60
+    mapping:
+      mineur: BUILD_PICKAXE
+      farmer: MAKE_BREAD
+      hunter: KILL_ENEMY
+      pretorien: BUILD_SWORD
+      artisan: BUILD_WORKBENCH
+      pilleur: OVERPOWERED
+
+  popup_cooldown_ms: 2000
+
+  # Comportement si plusieurs levels sont gagnés simultanément (ex : admin).
+  # true  = n'afficher QUE le popup du dernier niveau atteint
+  #         Ex : joueur saute du niveau 1 au niveau 5 → seul "NIVEAU 5" s'affiche
+  # false = afficher un popup pour chaque niveau (géré par popup_cooldown_ms)
+  show_last_only_on_bulk: true
+
+  # Texte principal du popup (ligne de titre grande au centre de l'écran).
+  # Placeholders : {level} {job}
+  # Exemples :
+  #   "§6§lNIVEAU {level}"         ← défaut (grand, doré, gras)
+  #   "§b§l✦ LEVEL UP ✦"          ← générique sans numéro
+  #   "§e§lNIVEAU {level} §a✔"     ← avec coche verte
+  title: "§6§lNIVEAU {level}"
+
+  # Texte du sous-titre (ligne plus petite sous le titre).
+  # Placeholders : {level} {job}
+  # Exemples :
+  #   "§b{job} §7atteint !"                        ← défaut
+  #   "§7Tu es maintenant §b{job} §7niveau §e{level}"  ← descriptif
+  #   "§a+1 niveau dans §b{job}"                   ← compact
+  subtitle: "§b{job} §7atteint !"
+
+  # Durée du fondu d'apparition en ticks (20 ticks = 1 seconde).
+  # 10 = 0.5 seconde d'apparition progressive  ← défaut
+  fade_in: 10
+
+  # Durée d'affichage complet en ticks (avant fondu de disparition).
+  # 50 = 2.5 secondes d'affichage  ← défaut
+  # 40 = 2 secondes (rapide)
+  # 80 = 4 secondes (laisse le temps de lire)
+  stay: 50
+
+  # Durée du fondu de disparition en ticks.
+  # 15 = 0.75 seconde de disparition progressive  ← défaut
+  fade_out: 15

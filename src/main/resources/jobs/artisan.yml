@@ -1,0 +1,211 @@
+# ============================================================
+# KjobsUltimate — Job : Artisan
+# ============================================================
+#
+# GUIDE DE CONFIGURATION D'UN JOB
+# ─────────────────────────────────────────────────────────────
+# Voir jobs/mineur.yml pour la documentation complète de tous les champs.
+# Recharger à chaud : /kjobs reload
+#
+# NOTES SPÉCIFIQUES À L'Artisan
+# ─────────────────────────────────────────────────────────────
+# CLÉ D'ACTION = Material du résultat du craft EN MAJUSCULES.
+#   Déclenché sur CraftItemEvent (craft vanilla Bukkit) via ArtisanListener.java.
+#   Déclenché AUSSI sur KcraftPostCraftEvent (Kcraft) via KcraftHook.java
+#   si le plugin Kcraft est installé (les deux listeners coexistent).
+#
+# CRAFT VANILLA vs KCRAFT
+#   Craft vanilla    : table de craft standard 3x3, recettes Bukkit.
+#   Craft Kcraft     : recettes custom définies dans Kcraft (items CIT, forges...)
+#   Les deux sources d'XP fonctionnent indépendamment pour le même Material.
+#   Si un item est craftable vanilla ET via Kcraft, le joueur peut gagner XP des deux.
+#
+# AMOUNT (craft par lot)
+#   En craft vanilla, CraftItemEvent est déclenché UNE FOIS par clic de craft,
+#   même si le joueur fait Shift+Click pour craft 64 items d'un coup.
+#   Conseillé : garder les XP par craft bas pour les items craftables en gros lots
+#   (STICK, WOOD, etc.) et plus élevés pour les items coûteux (armure diamant...).
+#
+# SILK TOUCH
+#   silktouch n'a aucun effet sur l'Artisan. Garder silktouch: false.
+#
+# ANTI-ABUSE Artisan (pas de cooldown bloc position, pas de cooldown PvP)
+#   L'anti-abuse principal est le coût des matières premières.
+#   Le daily_xp_cap est très recommandé pour l'Artisan :
+#     daily_xp_cap: 2000 = emptoyer le craft massif en boucle (STICK, WOOD...)
+#
+# EXEMPLES DE MATIÈRES CRAFTABLES (Bukkit 1.8.8)
+#   Bois/bases   : WOOD (planches), STICK, CHEST, WORKBENCH, FURNACE
+#   Armes fer    : IRON_SWORD, IRON_AXE
+#   Outils fer   : IRON_PICKAXE, IRON_SPADE, IRON_HOE, SHEARS
+#   Armure fer   : IRON_HELMET, IRON_CHESTPLATE, IRON_LEGGINGS, IRON_BOOTS
+#   Armes dia.   : DIAMOND_SWORD, DIAMOND_AXE
+#   Outils dia.  : DIAMOND_PICKAXE, DIAMOND_SHOVEL, DIAMOND_HOE
+#   Armure dia.  : DIAMOND_HELMET, DIAMOND_CHESTPLATE, DIAMOND_LEGGINGS, DIAMOND_BOOTS
+#   Blocs utiles : STONE_PLATE, DISPENSER, NOTE_BLOCK, PISTON_BASE, ENCHANTMENT_TABLE
+#   Redstone     : REDSTONE_TORCH_ON, LEVER, TRIPWIRE_HOOK, PISTON_STICKY_BASE
+#   Aliments     : BREAD, CAKE, COOKIE, PUMPKIN_PIE, MUSHROOM_SOUP
+
+display_name: "§eArtisan"
+description: "§7Maîtrise la fabrication et produit des objets de qualité."
+icon:
+  material: WORKBENCH
+  nbt_cit: "job_Artisan_icon"
+max_level: 50
+
+xp_curve:
+  type: linear
+  fallback_type: linear
+  fallback_base: 600
+  fallback_multiplier: 1.2
+  custom_levels:
+    1: 600
+    2: 900
+    3: 1300
+    4: 1800
+    5: 2500
+
+daily_xp_cap: 0
+
+bossbar:
+  color: YELLOW
+  style: SEGMENTED_10
+
+level_rewards:
+  5:
+    - "eco give {player} 250"
+  10:
+    - "eco give {player} 1000"
+    - "broadcast §e{player} §fpasse §eniveau 10 §fArtisan !"
+  25:
+    - "eco give {player} 5000"
+  50:
+    - "eco give {player} 25000"
+    - "broadcast §e{player} §fa atteint le §eniveau MAXIMUM §fdu job Artisan !"
+
+# ─────────────────────────────────────────────────────────────
+# ACTIONS DE L'Artisan : items à crafter pour gagner XP + argent
+# ─────────────────────────────────────────────────────────────
+# Déclenché par CraftItemEvent (vanilla) + KcraftPostCraftEvent (Kcraft).
+# Clé = Material du résultat du craft EN MAJUSCULES.
+#
+# xp    : XP brut accordé par craft (avant multiplicateurs).
+# money : argent versé via Vault par craft. 0 = pas d'écono.
+# silktouch: false pour tous (sans effet sur le craft).
+#
+# Conseils d'équilibrage :
+#   - Items économiques (STICK, WOOD)       : xp 1–2  (craftables en masse)
+#   - Items intermédiaires (CHEST, FURNACE) : xp 5–10
+#   - Outils/armes fer                       : xp 15–30
+#   - Armure complète / outils diamant       : xp 50–100
+#
+# Utiliser daily_xp_cap pour éviter l'abus de craft massif (STICK, planches...).
+actions:
+  WOOD:
+    xp: 1
+    money: 0
+    silktouch: false
+  STICK:
+    xp: 1
+    money: 0
+    silktouch: false
+  CHEST:
+    xp: 5
+    money: 0
+    silktouch: false
+  WORKBENCH:
+    xp: 3
+    money: 0
+    silktouch: false
+  FURNACE:
+    xp: 4
+    money: 0
+    silktouch: false
+  IRON_SWORD:
+    xp: 20
+    money: 0
+    silktouch: false
+  IRON_PICKAXE:
+    xp: 20
+    money: 0
+    silktouch: false
+  IRON_AXE:
+    xp: 20
+    money: 0
+    silktouch: false
+  IRON_SPADE:
+    xp: 15
+    money: 0
+    silktouch: false
+  IRON_CHESTPLATE:
+    xp: 30
+    money: 0
+    silktouch: false
+  IRON_HELMET:
+    xp: 25
+    money: 0
+    silktouch: false
+  IRON_LEGGINGS:
+    xp: 28
+    money: 0
+    silktouch: false
+  IRON_BOOTS:
+    xp: 22
+    money: 0
+    silktouch: false
+  DIAMOND_SWORD:
+    xp: 80
+    money: 0
+    silktouch: false
+  DIAMOND_PICKAXE:
+    xp: 80
+    money: 0
+    silktouch: false
+  DIAMOND_CHESTPLATE:
+    xp: 120
+    money: 0
+    silktouch: false
+  DIAMOND_HELMET:
+    xp: 100
+    money: 0
+    silktouch: false
+  DIAMOND_LEGGINGS:
+    xp: 110
+    money: 0
+    silktouch: false
+  DIAMOND_BOOTS:
+    xp: 90
+    money: 0
+    silktouch: false
+  BOW:
+    xp: 15
+    money: 0
+    silktouch: false
+  ARROW:
+    xp: 1
+    money: 0
+    silktouch: false
+  GOLDEN_APPLE:
+    xp: 50
+    money: 0
+    silktouch: false
+  ENCHANTMENT_TABLE:
+    xp: 150
+    money: 0
+    silktouch: false
+  BREWING_STAND:
+    xp: 60
+    money: 0
+    silktouch: false
+  ANVIL:
+    xp: 60
+    money: 0
+    silktouch: false
+  DISPENSER:
+    xp: 20
+    money: 0
+    silktouch: false
+  PISTON_BASE:
+    xp: 15
+    money: 0
+    silktouch: false
