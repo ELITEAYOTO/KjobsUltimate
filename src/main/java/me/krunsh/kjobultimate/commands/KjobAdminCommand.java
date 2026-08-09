@@ -548,6 +548,7 @@ public final class KjobAdminCommand implements CommandExecutor, TabCompleter {
         if (data == null) return;
         data.setLevel(jobId, level.intValue());
         data.setXP(jobId, 0);
+        plugin.notifyJobsUiChanged(target.getUniqueId(), "kjobs:admin-level");
         send(sender, "admin_command.level.set", "{prefix}\u00A7aNiveau de \u00A7e{player} \u00A77en \u00A7e{job_id} \u00A77defini a \u00A7f{level}",
             "{player}", target.getName(), "{job}", def.getDisplayName(), "{job_id}", jobId, "{level}", String.valueOf(level));
     }
@@ -568,6 +569,7 @@ public final class KjobAdminCommand implements CommandExecutor, TabCompleter {
         }
         data.setDisplayJob(null);
         data.markDirty();
+        plugin.notifyJobsUiChanged(target.getUniqueId(), "kjobs:admin-reset");
         send(sender, "admin_command.resetjob.done", "{prefix}\u00A7aJobs de \u00A7e{player} \u00A77remis a zero.", "{player}", target.getName());
     }
 
@@ -587,6 +589,8 @@ public final class KjobAdminCommand implements CommandExecutor, TabCompleter {
 
         data.setDisplayJob(jobId);
         data.markDirty();
+        plugin.notifyJobsUiChanged(target.getUniqueId(), "kjobs:admin-display",
+            "kjobs_main", "kjobs_detail");
         send(sender, "admin_command.display.set", "{prefix}\u00A7aJob actif de \u00A7e{player} \u00A77defini a \u00A7e{job}",
             "{player}", target.getName(), "{job}", def.getDisplayName(), "{job_id}", jobId);
     }
@@ -758,6 +762,7 @@ public final class KjobAdminCommand implements CommandExecutor, TabCompleter {
             send(sender, "admin_command.resetxp.all", "{prefix}\u00A7aXP de \u00A7e{player} \u00A77remis a \u00A7f0 \u00A77pour tous les jobs.",
                 "{player}", target.getName());
         }
+        plugin.notifyJobsUiChanged(target.getUniqueId(), "kjobs:admin-reset-xp");
     }
 
     private void handleQuestComplete(CommandSender sender, String[] args) {

@@ -1,7 +1,6 @@
 name: KjobsUltimate
 version: ${project.version}
 main: me.krunsh.kjobultimate.KjobUltimate
-api-version: '1.8'
 description: Systeme de jobs complet pour SparrowMC
 author: krunsh
 
