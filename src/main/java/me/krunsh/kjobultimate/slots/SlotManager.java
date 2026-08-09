@@ -84,6 +84,8 @@ public final class SlotManager {
         data.setJobInSlot(slot, jobId);
         if (data.getDisplayJob() == null) data.setDisplayJob(jobId);
         data.markDirty();
+        plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:job-assigned",
+                "kjobs_main", "kjobs_detail", "kjobs_quests");
 
         if (plugin.getConfigManager().isDebugSlots()) {
             KjobLogger.info("[Slots] " + player.getName() + " unlock " + jobId + " slot " + slot);
@@ -94,6 +96,8 @@ public final class SlotManager {
         jobId = normalize(jobId);
         if (!isJobActive(data, jobId)) return false;
         data.setDisplayJob(jobId);
+        plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:favorite",
+                "kjobs_main", "kjobs_detail");
         JobDefinition def = plugin.getJobRegistry().getJob(jobId);
         send(player, "slots.favorite_set", "{prefix}\u00A77Job favori: \u00A7e{job}", "{job}", displayName(def, jobId), "{job_id}", jobId);
         return true;
@@ -225,6 +229,8 @@ public final class SlotManager {
 
         if (highestEligible > currentUnlocked) {
             data.setUnlockedSlots(highestEligible);
+            plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:slot-unlocked",
+                    "kjobs_main", "kjobs_detail");
             notifySlotUnlocked(player);
             if (plugin.getConfigManager().isDebugSlots()) {
                 KjobLogger.info("[Slots] " + player.getName() + " unlocked slots "
@@ -249,6 +255,8 @@ public final class SlotManager {
         }
         data.setLastJobChangeAt(System.currentTimeMillis());
         data.markDirty();
+        plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:job-left",
+                "kjobs_main", "kjobs_detail", "kjobs_quests");
 
         JobDefinition def = plugin.getJobRegistry().getJob(jobId);
         send(player, "job_change.leave_confirmed", "{prefix}\u00A7aTu as quitte \u00A7e{job}\u00A7a. Progression remise a zero.",
@@ -275,6 +283,8 @@ public final class SlotManager {
             data.setDisplayJob(active.isEmpty() ? null : active.get(0));
         }
         data.markDirty();
+        plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:job-force-left",
+                "kjobs_main", "kjobs_detail", "kjobs_quests");
         return true;
     }
 

@@ -240,8 +240,8 @@ anti_abuse:
 #                               false → Kchat garde la main sur le tab list.
 #
 # kgui
-#   enabled : true  → menus /jobs affichés en GUI via KguiHook ContentProvider (Phase 7).
-#             false → /jobs renvoie un message texte uniquement (fallback).
+#   enabled : true  → menus /jobs affichés via l'API publique Kgui V2.
+#             false → le GUI interne Kjobs reste utilisé comme fallback.
 #
 # worldguard
 #   enabled             : true  → vérifie les régions WorldGuard avant d'accorder XP.
@@ -261,7 +261,7 @@ hooks:
     enabled: true
     disable_tab_header_footer: true
   kgui:
-    enabled: false
+    enabled: true
   worldguard:
     enabled: false
     require_build_flag: false

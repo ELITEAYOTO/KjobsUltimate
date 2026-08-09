@@ -59,13 +59,12 @@
             <systemPath>${project.basedir}/libs/PlaceholderAPI-2.11.3.jar</systemPath>
         </dependency>
 
-        <!-- Kgui (ContentProviderAPI) -->
+        <!-- Contrat public Kgui V2 uniquement. Le plugin reste un softdepend. -->
         <dependency>
-            <groupId>me.krunsh</groupId>
-            <artifactId>Kgui</artifactId>
-            <version>1.0.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/../Kgui/target/Kgui-1.0.0.jar</systemPath>
+            <groupId>com.github.ELITEAYOTO.Kgui</groupId>
+            <artifactId>kgui-api</artifactId>
+            <version>31a4d39</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Kcraft (KcraftPostCraftEvent) -->
@@ -86,13 +85,12 @@
             <systemPath>${project.basedir}/../Kstacker/target/KStacker-1.0.0.jar</systemPath>
         </dependency>
 
-        <!-- Kfaction (niveau faction, permission checks) -->
+        <!-- Contrat public Kfaction 2.3 uniquement. -->
         <dependency>
-            <groupId>me.krunsh</groupId>
-            <artifactId>Kfaction</artifactId>
-            <version>1.0.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/../Kfaction/target/Kfaction-1.0.0.jar</systemPath>
+            <groupId>com.github.ELITEAYOTO.Kfaction</groupId>
+            <artifactId>kfaction-api</artifactId>
+            <version>659a90e</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- SQLite JDBC — shadé et relocalisé -->

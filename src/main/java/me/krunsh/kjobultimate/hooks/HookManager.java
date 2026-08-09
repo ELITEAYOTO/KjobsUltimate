@@ -2,11 +2,20 @@ package me.krunsh.kjobultimate.hooks;
 
 import me.krunsh.kjobultimate.KjobUltimate;
 import me.krunsh.kjobultimate.util.KjobLogger;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.server.PluginDisableEvent;
+import org.bukkit.event.server.PluginEnableEvent;
+import org.bukkit.plugin.Plugin;
+
+import java.util.UUID;
 
 /**
  * Centralise la détection et l'initialisation de tous les hooks vers les plugins externes.
  */
-public final class HookManager {
+public final class HookManager implements Listener, AutoCloseable {
 
     private final KjobUltimate plugin;
 
@@ -18,12 +27,17 @@ public final class HookManager {
     private KstackerHook kstackerHook;
 
     private int registeredProviders = 0;
+    private boolean started;
 
     public HookManager(KjobUltimate plugin) {
         this.plugin = plugin;
     }
 
     public void setupAll() {
+        if (!started) {
+            plugin.getServer().getPluginManager().registerEvents(this, plugin);
+            started = true;
+        }
         setupVault();
         setupPAPI();
         setupKgui();
@@ -60,12 +74,19 @@ public final class HookManager {
 
     private void setupKgui() {
         if (!plugin.getConfigManager().getMainConfig().getBoolean("hooks.kgui.enabled", true)) return;
-        if (plugin.getServer().getPluginManager().getPlugin("Kgui") != null) {
+        Plugin candidate = plugin.getServer().getPluginManager().getPlugin("Kgui");
+        if (candidate == null || !candidate.isEnabled()) {
+            KjobLogger.warn("Kgui introuvable — le GUI interne Kjobs reste actif.");
+            return;
+        }
+        try {
             kguiHook = new KguiHook(plugin);
-            registeredProviders = kguiHook.registerProviders();
-            KjobLogger.success("Kgui connecté — " + registeredProviders + " ContentProviders enregistrés.");
-        } else {
-            KjobLogger.warn("Kgui introuvable — les menus GUI seront désactivés.");
+            registeredProviders = kguiHook.getRegisteredProviders();
+            KjobLogger.success("Kgui V2 connecté — " + registeredProviders + " ContentProviders enregistrés.");
+        } catch (RuntimeException failure) {
+            kguiHook = null;
+            registeredProviders = 0;
+            KjobLogger.warn("Kgui présent mais API V2 indisponible: " + failure.getMessage());
         }
     }
 
@@ -82,10 +103,11 @@ public final class HookManager {
 
     private void setupKfaction() {
         if (!plugin.getConfigManager().getMainConfig().getBoolean("hooks.kfaction.enabled", true)) return;
-        if (plugin.getServer().getPluginManager().getPlugin("Kfaction") != null) {
+        Plugin candidate = plugin.getServer().getPluginManager().getPlugin("Kfaction");
+        if (candidate != null && candidate.isEnabled()) {
             try {
-                kfactionHook = new KfactionHook(plugin);
-                KjobLogger.success("Kfaction connecte - relations PvP Pretorien actives.");
+                kfactionHook = new KfactionHook();
+                KjobLogger.success("Kfaction API 2.x connectée — relations PvP Prétorien actives.");
             } catch (Throwable ex) {
                 kfactionHook = null;
                 KjobLogger.warn("Kfaction present mais hook indisponible: " + ex.getMessage());
@@ -122,4 +144,49 @@ public final class HookManager {
     public boolean isKstackerEnabled() { return kstackerHook != null; }
 
     public int getRegisteredProviders() { return registeredProviders; }
+
+    public void invalidateKgui(UUID playerId, String reason, String... menuIds) {
+        if (kguiHook != null) kguiHook.invalidate(playerId, reason, menuIds);
+    }
+
+    public boolean openKgui(org.bukkit.entity.Player player, String menuId,
+                            java.util.Map<String, String> arguments) {
+        return kguiHook != null && kguiHook.openMenu(player, menuId, arguments);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPluginEnable(PluginEnableEvent event) {
+        if (event == null || event.getPlugin() == null) return;
+        String name = event.getPlugin().getName();
+        if ("Kgui".equalsIgnoreCase(name) && kguiHook == null) setupKgui();
+        if ("Kfaction".equalsIgnoreCase(name) && kfactionHook == null) setupKfaction();
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onPluginDisable(PluginDisableEvent event) {
+        if (event == null || event.getPlugin() == null) return;
+        String name = event.getPlugin().getName();
+        if ("Kgui".equalsIgnoreCase(name)) closeKgui();
+        if ("Kfaction".equalsIgnoreCase(name)) kfactionHook = null;
+    }
+
+    private void closeKgui() {
+        KguiHook current = kguiHook;
+        kguiHook = null;
+        registeredProviders = 0;
+        if (current == null) return;
+        try {
+            current.close();
+        } catch (RuntimeException failure) {
+            KjobLogger.warn("Arrêt du hook Kgui incomplet: " + failure.getMessage());
+        }
+    }
+
+    @Override
+    public void close() {
+        closeKgui();
+        kfactionHook = null;
+        if (started) HandlerList.unregisterAll(this);
+        started = false;
+    }
 }

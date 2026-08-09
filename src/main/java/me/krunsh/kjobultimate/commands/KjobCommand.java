@@ -53,6 +53,7 @@ public final class KjobCommand implements CommandExecutor, TabCompleter {
 
         String sub = args[0].toLowerCase();
         if ("menu".equals(sub) || "gui".equals(sub)) {
+            if (openKgui(player, "kjobs_main", Collections.<String, String>emptyMap())) return true;
             if (plugin.getGuiManager() != null && plugin.getGuiManager().isEnabled()) {
                 plugin.getGuiManager().openDefault(player);
             } else {
@@ -97,6 +98,7 @@ public final class KjobCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if ("quests".equals(sub) || "quest".equals(sub) || "quetes".equals(sub) || "quete".equals(sub)) {
+            if (openKgui(player, "kjobs_quests", Collections.<String, String>emptyMap())) return true;
             if (plugin.getGuiManager() != null && plugin.getGuiManager().isEnabled()) {
                 plugin.getGuiManager().openQuests(player);
             } else {
@@ -114,11 +116,18 @@ public final class KjobCommand implements CommandExecutor, TabCompleter {
     }
 
     private void openMainMenu(Player player) {
+        if (openKgui(player, "kjobs_main", Collections.<String, String>emptyMap())) return;
         if (plugin.getGuiManager() != null && plugin.getGuiManager().isEnabled()) {
             plugin.getGuiManager().openDefault(player);
             return;
         }
         openTextMenu(player);
+    }
+
+    private boolean openKgui(Player player, String menuId, Map<String, String> arguments) {
+        return plugin.getHookManager() != null
+            && plugin.getHookManager().isKguiEnabled()
+            && plugin.getHookManager().openKgui(player, menuId, arguments);
     }
 
     private void openTextMenu(Player player) {
@@ -348,6 +357,7 @@ public final class KjobCommand implements CommandExecutor, TabCompleter {
             if (!data.isBossBarHudEnabled() && plugin.getHudManager() != null) plugin.getHudManager().removePlayer(player);
             send(player, "hud_toggle.bossbar", "{prefix}\u00A77BossBar jobs: {state}",
                 "{state}", data.isBossBarHudEnabled() ? "\u00A7aON" : "\u00A7cOFF");
+            plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:bossbar", "kjobs_settings");
             return;
         }
 
@@ -356,6 +366,7 @@ public final class KjobCommand implements CommandExecutor, TabCompleter {
             if (!data.isActionBarHudEnabled() && plugin.getHudManager() != null) plugin.getHudManager().clearActionBar(player);
             send(player, "hud_toggle.actionbar", "{prefix}\u00A77ActionBar jobs: {state}",
                 "{state}", data.isActionBarHudEnabled() ? "\u00A7aON" : "\u00A7cOFF");
+            plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:actionbar", "kjobs_settings");
             return;
         }
 
@@ -385,6 +396,8 @@ public final class KjobCommand implements CommandExecutor, TabCompleter {
         } else if (!data.isActionBarHudEnabled() && plugin.getHudManager() != null) {
             plugin.getHudManager().clearActionBar(player);
         }
+        plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:hud",
+            "kjobs_settings", "kjobs_main");
     }
 
     private void sendHelp(Player player) {

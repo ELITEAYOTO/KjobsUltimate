@@ -16,6 +16,8 @@ import me.krunsh.kjobultimate.util.KjobLogger;
 import me.krunsh.kjobultimate.validation.ConfigValidator;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.UUID;
+
 /**
  * Point d'entrée du plugin KjobUltimate.
  * Ordre de démarrage strict :
@@ -100,6 +102,9 @@ public final class KjobUltimate extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (hookManager != null) {
+            hookManager.close();
+        }
         if (hudManager != null) {
             hudManager.shutdown();
         }
@@ -195,5 +200,10 @@ public final class KjobUltimate extends JavaPlugin {
 
     public QuestManager getQuestManager() {
         return questManager;
+    }
+
+    /** Point unique d'invalidation optionnelle, sans importer Kgui dans le métier. */
+    public void notifyJobsUiChanged(UUID playerId, String reason, String... menuIds) {
+        if (hookManager != null) hookManager.invalidateKgui(playerId, reason, menuIds);
     }
 }

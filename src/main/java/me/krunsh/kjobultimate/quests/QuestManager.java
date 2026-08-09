@@ -309,6 +309,7 @@ public final class QuestManager {
         // plusieurs chaines, mais jamais l'etape suivante de la meme chaine.
         Set<String> activeQuestIds = QuestChainPolicy.activeQuestIds(
                 candidates, current.chains, data.getQuestProgress());
+        boolean changed = false;
 
         for (QuestDefinition quest : candidates) {
             if (!activeQuestIds.contains(quest.getId())) continue;
@@ -324,6 +325,7 @@ public final class QuestManager {
             if (questData.isCompleted()) continue;
 
             boolean completedNow = questData.addProgress(amount, quest.getAmount());
+            changed = true;
             data.markDirty();
             saveQuestAsync(data.getUuid(), questData);
 
@@ -336,6 +338,7 @@ public final class QuestManager {
                 notifyCompleted(player, quest);
             }
         }
+        if (changed) plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:quest-progress");
     }
 
     public boolean claimReward(Player player, String questId) {
@@ -476,6 +479,7 @@ public final class QuestManager {
         // DISTRIBUTING interdit deja tout second versement apres redemarrage.
         questData.markClaimed();
         data.markDirty();
+        plugin.notifyJobsUiChanged(uuid, "kjobs:quest-claimed", "kjobs_main", "kjobs_quests");
 
         boolean success = false;
         String error = null;
@@ -564,6 +568,7 @@ public final class QuestManager {
         if (questData != null && !questData.isClaimed()) {
             questData.markClaimed();
             data.markDirty();
+            plugin.notifyJobsUiChanged(uuid, "kjobs:quest-claim-locked", "kjobs_main", "kjobs_quests");
             saveQuestAsync(uuid, questData);
         }
 
@@ -690,6 +695,8 @@ public final class QuestManager {
         questData.setCompletedAt(System.currentTimeMillis());
         data.markDirty();
         resetQuestStateAsync(data.getUuid(), questData, stateKey);
+        plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:quest-force-complete",
+                "kjobs_main", "kjobs_quests");
         notifyCompleted(player, quest);
         return true;
     }
@@ -716,6 +723,8 @@ public final class QuestManager {
 
         data.markDirty();
         resetQuestStateAsync(data.getUuid(), questData, stateKey);
+        plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:quest-reset",
+                "kjobs_main", "kjobs_quests");
         return true;
     }
 

@@ -221,6 +221,7 @@ public final class XpManager {
         data.setLevel(job.getId(), currentLevel);
         data.setXP(job.getId(), safeRemainingXp);
         data.setDisplayJob(job.getId());
+        plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:xp");
 
         if (levelsGained > 0) {
             return LevelUpResult.leveled(
@@ -284,6 +285,7 @@ public final class XpManager {
             int newXp = (int) Math.max(0L, reduced);
 
             data.setXP(normalizedJobId, newXp);
+            plugin.notifyJobsUiChanged(player.getUniqueId(), "kjobs:admin-xp");
 
             return LevelUpResult.noLevelUp(
                 state.level, newXp, 0);
