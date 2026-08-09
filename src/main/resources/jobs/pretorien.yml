@@ -1,0 +1,93 @@
+# ============================================================
+# KjobsUltimate — Job : Prétorien
+# ============================================================
+#
+# GUIDE DE CONFIGURATION D'UN JOB
+# ─────────────────────────────────────────────────────────────
+# Voir jobs/mineur.yml pour la documentation complète de tous les champs.
+# Recharger à chaud : /kjobs reload
+#
+# NOTES SPÉCIFIQUES AU PRÉTORIEN
+# ─────────────────────────────────────────────────────────────
+# CLÉ D'ACTION
+#   Le Prétorien n'a qu'UNE SEULE action possible : "pvp_kill".
+#   C'est la clé utilisée par PretorienListener pour chercher la récompense.
+#   NE PAS changer cette clé sans modifier PretorienListener.java en conséquence.
+#
+# ÉVÉNEMENT DÉCLENCHEUR
+#   Déclenché sur PlayerDeathEvent quand une victime meurt et que victim.getKiller()
+#   est non nul et différent de la victime elle-même (pas de suicide).
+#   L'auto-kill (creeper sur soi, chute, etc.) NE déclenche PAS de gain XP.
+#
+# ANTI-FARM PVP (pvp_target_cooldown dans config.yml)
+#   Cooldown en secondes entre deux kills PvP sur LA MÊME victime.
+#   Stockage : UUID de la victime → timestamp d'expiration (en RAM uniquement).
+#   Réinitialisé au restart serveur (comportement intentionnel).
+#   Exemple : pvp_target_cooldown: 3600 = 1 kill par victime par heure max.
+#
+# XP PAR KILL
+#   Le champ "xp" représente l'XP brut accordé par kill (avant multiplicateurs).
+#   Pour différencier l'XP selon le rang de la victime, il faudra un
+#   système externe (Phase future) ou donner plus d'argent via les commandes
+#   level_rewards plutôt que via le gain XP direct.
+#
+# SILK TOUCH
+#   silktouch n'a aucun effet sur le Prétorien. Garder silktouch: false.
+
+display_name: "§6Prétorien"
+description: "§7Combattant PvP d'élite — protège la faction et gagne de l'XP en combat."
+icon:
+  material: IRON_SWORD
+  nbt_cit: "job_pretorien_icon"
+max_level: 50
+
+xp_curve:
+  type: custom
+  fallback_type: linear
+  fallback_base: 1200
+  fallback_multiplier: 1.35
+  custom_levels:
+    1: 1200
+    2: 1900
+    3: 2800
+    4: 4000
+    5: 5600
+    6: 7700
+    7: 10400
+    8: 13800
+    9: 18000
+    10: 23000
+
+daily_xp_cap: 0
+
+bossbar:
+  color: YELLOW
+  style: SOLID
+
+level_rewards:
+  5:
+    - "eco give {player} 600"
+  10:
+    - "eco give {player} 2500"
+    - "broadcast §6{player} §fpasse §6niveau 10 §fPrétorien !"
+  25:
+    - "eco give {player} 15000"
+  50:
+    - "eco give {player} 75000"
+    - "broadcast §6{player} §fa atteint le §6niveau MAXIMUM §fdu job Prétorien !"
+
+# ─────────────────────────────────────────────────────────────
+# ACTION DU PRÉTORIEN : tuer un joueur en PvP
+# ─────────────────────────────────────────────────────────────
+# Déclenché par PlayerDeathEvent (player.getKiller() != null && != victim).
+# UNE SEULE action possible : "pvp_kill". NE PAS renommer cette clé.
+# Anti-farm : pvp_target_cooldown (secondes) depuis config.yml.
+#
+# xp    : XP brut par kill PvP (avant multiplicateurs).
+# money : argent versé via Vault par kill.
+# silktouch: false (sans effet sur le PvP).
+actions:
+  pvp_kill:
+    xp: 100
+    money: 0
+    silktouch: false

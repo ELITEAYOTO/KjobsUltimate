@@ -1,0 +1,137 @@
+# ============================================================
+# KjobsUltimate — Sons
+# ============================================================
+#
+# STRUCTURE DE CHAQUE ENTRÉE
+# ─────────────────────────────────────────────────────────────
+# <evenement>:
+#   enabled : true/false — activer/désactiver ce son indépendamment.
+#   sound   : nom de l'enum org.bukkit.Sound (1.8.8) EN MAJUSCULES.
+#   volume  : 0.0 → ∞  (au-delà de 1.0 : portée d'écoute plus grande, pas plus fort).
+#   pitch   : 0.5 → 2.0  (0.5 = grave/lent | 1.0 = normal | 2.0 = aigu/rapide).
+#
+# SONS DISPONIBLES EN BUKKIT 1.8.8 (org.bukkit.Sound)
+# ─────────────────────────────────────────────────────────────
+# ── Notes / Progression ──
+#   LEVEL_UP             → son de level up vanilla Minecraft     ★ populaire ★
+#   NOTE_PLING           → cloche claire, petit ding             ★ populaire ★
+#   NOTE_BASS            → basse grave (instrument bois)
+#   NOTE_BASSGUITAR      → basse électrique
+#   NOTE_PIANO           → note de piano
+#   NOTE_STICKS          → claquement de baguettes de batterie
+#   NOTE_SNARE_DRUM      → caisse claire
+#
+# ── Interface / Inventaire ──
+#   CLICK                → clic de bouton
+#   CHEST_OPEN           → ouverture de coffre
+#   CHEST_CLOSE          → fermeture de coffre
+#   ITEM_PICKUP          → ramassage d'item
+#   ORB_PICKUP           → absorption d'orbe d'XP (petit ding doux)
+#   ANVIL_USE            → utilisation d'enclume
+#   ANVIL_LAND           → enclume qui tombe (son fort)
+#   ENDERCHEST_OPEN      → ouverture d'ender chest
+#   ENDERCHEST_CLOSE     → fermeture d'ender chest
+#
+# ── Feux d'artifice ──
+#   FIREWORK_BLAST       → explosion de feu d'artifice (pop fort)   ★ populaire ★
+#   FIREWORK_BLAST2      → explosion alternative, plus grave
+#   FIREWORK_LARGE_BLAST → grande explosion (long et fort)
+#   FIREWORK_LARGE_BLAST2→ grande explosion alternative
+#   FIREWORK_LAUNCH      → lancement de fusée (sifflement montant)
+#   FIREWORK_TWINKLE     → scintillement (pop doux)
+#   FIREWORK_TWINKLE2    → scintillement alternatif
+#
+# ── Blocs / Environnement ──
+#   DIG_STONE            → pioche sur pierre
+#   DIG_GRASS            → pelle sur herbe/terre
+#   DIG_WOOD             → outil sur bois
+#   DIG_GRAVEL           → outil sur gravier
+#   DIG_SAND             → outil sur sable
+#   DIG_SNOW             → outil sur neige
+#   EXPLODE              → explosion de TNT
+#
+# ── Créatures / PNJ ──
+#   VILLAGER_YES         → "hmm-hmm" villageois (validation douce)
+#   VILLAGER_NO          → "hm" villageois (refus)
+#   ENDERMAN_TELEPORT    → téléportation d'enderman
+#   BLAZE_HIT            → blaze touché
+#   CAT_MEOW             → miaulement de chat
+#   SUCCESSFUL_HIT       → frappe de combat réussie
+#
+# EXEMPLES DE COMBINAISONS RECOMMANDÉES
+# ─────────────────────────────────────────────────────────────
+# Level up doux       : sound: NOTE_PLING,         volume: 0.8, pitch: 1.5
+# Level up épique     : sound: LEVEL_UP,           volume: 1.0, pitch: 1.0
+# Quête complétée     : sound: NOTE_PLING,         volume: 1.0, pitch: 1.2
+# Slot débloqué       : sound: FIREWORK_BLAST,     volume: 1.0, pitch: 1.0
+# Niveau max atteint  : sound: FIREWORK_BLAST2,    volume: 1.0, pitch: 0.9
+# Refus doux          : sound: VILLAGER_NO,        volume: 0.7, pitch: 1.0
+# XP discret          : sound: ORB_PICKUP,         volume: 0.3, pitch: 1.5
+# Changement de job   : sound: NOTE_BASS,          volume: 1.0, pitch: 0.8
+# ─────────────────────────────────────────────────────────────
+
+level_up:
+  enabled: true
+  sound: LEVEL_UP
+  volume: 1.0
+  pitch: 1.0
+
+quest_complete:
+  enabled: true
+  sound: NOTE_PLING
+  volume: 1.0
+  pitch: 1.2
+
+quest_reward_claimed:
+  enabled: true
+  sound: ITEM_PICKUP
+  volume: 1.0
+  pitch: 1.0
+
+slot_unlocked:
+  enabled: true
+  sound: FIREWORK_BLAST
+  volume: 1.0
+  pitch: 1.0
+
+xp_gain:
+  enabled: false
+  sound: ORB_PICKUP
+  volume: 0.3
+  pitch: 1.5
+
+hud_toggle:
+  enabled: true
+  sound: CLICK
+  volume: 0.6
+  pitch: 1.0
+
+job_change:
+  enabled: true
+  sound: NOTE_BASS
+  volume: 1.0
+  pitch: 0.8
+
+quest_reset_daily:
+  enabled: false
+  sound: NOTE_PLING
+  volume: 0.8
+  pitch: 0.9
+
+quest_reset_weekly:
+  enabled: false
+  sound: NOTE_PLING
+  volume: 0.8
+  pitch: 0.7
+
+new_quest_assigned:
+  enabled: false
+  sound: NOTE_PLING
+  volume: 0.5
+  pitch: 1.1
+
+max_level_reached:
+  enabled: true
+  sound: FIREWORK_BLAST2
+  volume: 1.0
+  pitch: 0.9
