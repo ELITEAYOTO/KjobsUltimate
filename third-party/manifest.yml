@@ -1,0 +1,61 @@
+schema-version: 1
+generated-for: "KjobsUltimateDEV canonical local baseline"
+policy:
+  redistribution: "review-required"
+  note: "These legacy local JARs are pinned for reproducible development only. Review licensing and replace systemPath dependencies before publishing this repository."
+
+artifacts:
+  - file: "libs/CombatTagPlus.jar"
+    bytes: 209723
+    sha256: "70592c644c427d29ed6e1a968411c37746ae053fa575a9e0e7d0e3ef5e570b64"
+  - file: "libs/EssentialsX-2.20.1.jar"
+    bytes: 3070345
+    sha256: "802ea30bda460ca4597e818925816933c123b08d8126a814fac28d03a61bf542"
+  - file: "libs/FAWE.jar"
+    bytes: 5760362
+    sha256: "4fcb2a2346a8a453843d794a9260594668eace85d9f0823e66aa9084710b0f36"
+  - file: "libs/HeadDatabase.jar"
+    bytes: 175662
+    sha256: "1673999066a762beeb5365cc362073e6667ce4699b292b8f51d924171c4dbc2f"
+  - file: "libs/HolographicDisplays.jar"
+    bytes: 577128
+    sha256: "6ba5cfab439d61cb340be8ec3d14597a39f09879a03698497bf13d1a02880711"
+  - file: "libs/HolographicExtension.jar"
+    bytes: 67193
+    sha256: "a132461efa2bc40f621612ef9df6916c0ab3518cdd04a5ba14b55c1c720853dd"
+  - file: "libs/item-nbt-api-plugin-2.15.5.jar"
+    bytes: 262374
+    sha256: "94056a0c9252cb3cd81ff2fe4dc96e674b51098c86b162b861b7dca1d2d33921"
+  - file: "libs/LuckPerms-Bukkit-5.4.141.jar"
+    bytes: 1462680
+    sha256: "84b7e66b42e0851ef8f8c3f9c30bcc1d1082b951983acfc332b36d3268034d09"
+  - file: "libs/Multiverse-Core-2.5.0.jar"
+    bytes: 1727475
+    sha256: "f43b8aa54870d157463fe46902a284f4e386200a58773d21f9a4734fde336b35"
+  - file: "libs/Multiverse-Inventories-2.5.0-SNAPSHOT (1).jar"
+    bytes: 317458
+    sha256: "1b76acf9695cc7c42fb2161fcf751c724895b2c8168ed3092cb57236b88fa7b9"
+  - file: "libs/Multiverse-Portals-2.5.jar"
+    bytes: 106076
+    sha256: "96fad9cf9278350f0f85429f40213603e12706e2d440097ffa9da0e581b4f11b"
+  - file: "libs/PlaceholderAPI-2.11.3.jar"
+    bytes: 929541
+    sha256: "281ff9a5a8c66a7ebe1161bead18081356c2fa416e98d834b37aed5b474a703d"
+  - file: "libs/PlayerKits2-1.22.2.jar"
+    bytes: 488431
+    sha256: "cc9e71db2b4fd26ad392a2f4d44ba4c56a6e45e08cff7a0584aa9051ec8fbfe2"
+  - file: "libs/PlayerPoints.jar"
+    bytes: 109697
+    sha256: "3aa5f6c6c366b3758d49f1a2e23f3a10939d38138665878430b68a4bb39cddbc"
+  - file: "libs/ProtocolLib.jar"
+    bytes: 4977063
+    sha256: "95d73b881b5184bbc9629b8b1a6828f0996b754bcaa37197f2d478031cce1683"
+  - file: "libs/TAB.jar"
+    bytes: 618547
+    sha256: "06a062b73f9641b4dcdfd26801e1c983d95afa2ec5c46f43de8b460754ee8504"
+  - file: "libs/Vault.jar"
+    bytes: 296909
+    sha256: "d7b28f10a6b50b667836dffdc8de5e4bae85db74db72e73fa9f062edbb375795"
+  - file: "libs/WorldGuard.jar"
+    bytes: 1279184
+    sha256: "d7265ca50ae071b0776afab20ec39bf59f0c8d974f34a3899e6f841367e5eac6"

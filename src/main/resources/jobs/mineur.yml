@@ -1,0 +1,236 @@
+# ============================================================
+# KjobsUltimate — Job : Mineur
+# ============================================================
+#
+# GUIDE DE CONFIGURATION D'UN JOB
+# ─────────────────────────────────────────────────────────────
+# Recharger à chaud : /kjobs reload
+#
+# ┌─ CHAMPS RACINE ──────────────────────────────────────────────┐
+# │ display_name : Nom affiché en jeu. Supporte les codes couleur §.      │
+# │               Ex : "§bMineur" | "§aFarmer" | "§cHunter"              │
+# │ description  : Description dans le menu GUI. Supporte les codes §.    │
+# │ icon         : Icône du job dans le menu GUI Kgui.                     │
+# │   material   : Material Bukkit 1.8.8 en MAJUSCULES.                   │
+# │               Ex : IRON_PICKAXE, BOW, WHEAT, IRON_SWORD, WORKBENCH    │
+# │   nbt_cit    : ID custom CIT Optifine pour texture personnalisée.      │
+# │               Laisser vide "" si pas de resource pack CIT.             │
+# │ max_level    : Niveau maximum du job. Recommandé : 25–100.            │
+# └─────────────────────────────────────────────────────────────┘
+#
+# ┌─ XP_CURVE ───────────────────────────────────────────────────┐
+# │ Quantité d'XP requise pour passer à chaque niveau supérieur.         │
+# │                                                                       │
+# │ type : "custom"                                                       │
+# │   Les niveaux listés dans custom_levels sont utilisés exactement.     │
+# │   Les niveaux non listés utilisent la formule fallback.               │
+# │                                                                       │
+# │ type : "linear" ou "exponential"                                      │
+# │   xp_requis(n) = fallback_base × (fallback_multiplier ^ (n-1))        │
+# │   Ex : base=1000, mult=1.3 → niv1=1000, niv2=1300, niv3=1690, ...    │
+# │                                                                       │
+# │ custom_levels : map [numéro_niveau → xp_requis_pour_CE_niveau]       │
+# │   "5: 4200" = il faut 4200 XP pour passer du niveau 4 au niveau 5.   │
+# │   Seuls les niveaux listés sont explicités, les autres = fallback.    │
+# │                                                                       │
+# │ daily_xp_cap : XP max que ce joueur peut gagner dans CE job par 24h.  │
+# │   0 = pas de cap. Ex : 3000 = max 3000 XP/jour pour ce job.          │
+# │   Indépendant du cap global de config.yml.                            │
+# └─────────────────────────────────────────────────────────────┘
+#
+# ┌─ BOSSBAR ───────────────────────────────────────────────────┐
+# │ color : couleur de la bossbar pour ce job.                           │
+# │   Valeurs : PINK | BLUE | RED | GREEN | YELLOW | PURPLE | WHITE       │
+# │   (En 1.8.8, fake wither NMS — couleur active après migration 1.9+)  │
+# │                                                                       │
+# │ style : style de la bossbar.                                          │
+# │   SOLID        → barre pleine (progression fluide, recommandé)        │
+# │   SEGMENTED_6  → divisée en 6 segments                                │
+# │   SEGMENTED_10 → divisée en 10 segments                               │
+# │   SEGMENTED_12 → divisée en 12 segments                               │
+# │   SEGMENTED_20 → divisée en 20 segments                               │
+# └─────────────────────────────────────────────────────────────┘
+#
+# ┌─ LEVEL_REWARDS ──────────────────────────────────────────────┐
+# │ Commandes exécutées par la CONSOLE à chaque palier de niveau.        │
+# │ Format : map [niveau_entier → liste_de_commandes]                   │
+# │ Placeholder disponible dans les commandes : {player}                │
+# │ Toutes les commandes sont exécutées en CONSOLE (permissions inf.).  │
+# │                                                                      │
+# │ Exemples :                                                           │
+# │  "eco give {player} 500"                                             │
+# │     → donner de l'argent (EssentialsX / CMI)                        │
+# │  "give {player} DIAMOND 5"                                           │
+# │     → donner 5 diamants dans l'inventaire                           │
+# │  "broadcast §b{player} §fpasse §bniveau 10 Mineur !"               │
+# │     → annonce publique à tous les joueurs                           │
+# │  "msg {player} §6Bravo !"                                           │
+# │     → message privé au joueur                                       │
+# │  "lp user {player} permission set kjob.vip true"                    │
+# │     → donner une permission via LuckPerms                           │
+# │  "lp user {player} parent add vip"                                  │
+# │     → ajouter au groupe LuckPerms "vip"                             │
+# │  "pex user {player} group add premium"                               │
+# │     → PermissionsEx : ajouter au groupe premium                     │
+# │  "cmi kit reward_mineur_10 {player}"                                 │
+# │     → donner un kit CMI au joueur                                   │
+# │  "effect {player} speed 300 1"                                       │
+# │     → potion de rapidité 5 minutes (300s)                          │
+# │  "gamemode survival {player}"                                        │
+# │     → forcer le mode survie                                         │
+# └────────────────────────────────────────────────────────────┘
+#
+# ┌─ ACTIONS ───────────────────────────────────────────────────┐
+# │ Clé : nom du MATERIAL Bukkit 1.8.8 EN MAJUSCULES.                   │
+# │   Mineur/Farmer → nom du bloc (DIAMOND_ORE, WHEAT, NETHER_WARTS...)  │
+# │   Hunter        → nom de l'EntityType (ZOMBIE, SKELETON, GUARDIAN...) │
+# │   Artisan      → Material du résultat craft (IRON_SWORD, CHEST...)   │
+# │   Prétorien     → clé fixe "pvp_kill" (1 seule entrée possible)       │
+# │                                                                      │
+# │ xp        : XP brut accordé par action (avant multiplicateurs).     │
+# │             Ex : 100 XP → 150 XP avec bonus ×1.5 permission.         │
+# │ money     : argent versé via Vault. 0 = pas de récompense écono.    │
+# │ silktouch : true  → XP BLOQUÉ si Silk Touch (+ silktouch_enabled).  │
+# │             false → XP accordé même avec Silk Touch.                │
+# │                                                                      │
+# │ Matières disponibles (Bukkit 1.8.8, non exhaustif) :                │
+# │   Minerais  : STONE, COAL_ORE, IRON_ORE, GOLD_ORE, DIAMOND_ORE,    │
+# │               LAPIS_ORE, REDSTONE_ORE, QUARTZ_ORE, EMERALD_ORE      │
+# │   Divers    : OBSIDIAN, GRAVEL, SAND, CLAY, NETHERRACK, SOUL_SAND   │
+# │   Cultures  : WHEAT, CARROT, POTATO, MELON_BLOCK, PUMPKIN,          │
+# │               SUGAR_CANE_BLOCK, CACTUS, NETHER_WARTS, COCOA         │
+# │   Bois      : LOG (chêne/bouleau/sapin/jungle), LOG_2 (acacia/bois  │
+# │               foncé), LEAVES, LEAVES_2                              │
+# │   Mobs      : ZOMBIE, SKELETON, SPIDER, CREEPER, ENDERMAN, BLAZE,   │
+# │               GHAST, WITCH, CAVE_SPIDER, PIG_ZOMBIE,                │
+# │               WITHER_SKELETON, MAGMA_CUBE, SLIME, SILVERFISH,       │
+# │               GUARDIAN, PIG_ZOMBIE                                  │
+# └────────────────────────────────────────────────────────────┘
+
+display_name: "§bMineur"
+description: "§7Extrait les ressources de la terre et des profondeurs."
+icon:
+  material: IRON_PICKAXE
+  nbt_cit: "job_mineur_icon"
+max_level: 50
+
+xp_curve:
+  type: custom
+  fallback_type: linear
+  fallback_base: 1000
+  fallback_multiplier: 1.3
+  custom_levels:
+    1: 1000
+    2: 1500
+    3: 2200
+    4: 3000
+    5: 4200
+    6: 5800
+    7: 7800
+    8: 10200
+    9: 13000
+    10: 17000
+
+daily_xp_cap: 0   # 0 = pas de cap
+
+bossbar:
+  color: BLUE
+  style: SOLID
+
+level_rewards:
+  5:
+    - "eco give {player} 500"
+    - "broadcast §b{player} §fpasse §bniveau 5 §fMineur !"
+  10:
+    - "eco give {player} 2000"
+    - "give {player} DIAMOND 5"
+    - "broadcast §b{player} §fpasse §bniveau 10 §fMineur !"
+  25:
+    - "eco give {player} 10000"
+    - "give {player} DIAMOND 15"
+  50:
+    - "eco give {player} 50000"
+    - "give {player} DIAMOND_BLOCK 5"
+    - "broadcast §b{player} §fa atteint le §bniveau MAXIMUM §fdu job Mineur !"
+
+# ─────────────────────────────────────────────────────────────
+# ACTIONS DU MINEUR : blocs à casser pour gagner XP + argent
+# ─────────────────────────────────────────────────────────────
+# Déclenché par BlockBreakEvent. Chaque bloc cassé = 1 action.
+# Clé = Material Bukkit 1.8.8 EN MAJUSCULES.
+#
+# xp : XP brut accordé (avant multiplicateurs permission/event).
+# money : argent versé via Vault (0 = pas d'écono sur ce bloc).
+# silktouch :
+#   true  → XP BLOQUÉ si le joueur utilise Silk Touch ET
+#             que anti_abuse.silktouch_enabled: true dans config.yml.
+#             Recommandé pour les minerais (DIAMOND_ORE, IRON_ORE...)
+#             pour forcer l'utilisation d'une pioche normale.
+#   false → XP accordé même avec Silk Touch (OBSIDIAN, GRAVEL, etc.).
+#
+# Conseils de équilibrage :
+#   - Blocs courants (STONE, GRAVEL) : xp faible (3–8)
+#   - Minerais bas de gamme (COAL_ORE, REDSTONE_ORE) : xp moyen (15–30)
+#   - Minerais précieux (DIAMOND_ORE, EMERALD_ORE) : xp élevé (80–150)
+#   - Blocs de Nether (QUARTZ_ORE, NETHERRACK) : xp moyen (5–40)
+actions:
+  STONE:
+    xp: 5
+    money: 0
+    silktouch: false
+  COAL_ORE:
+    xp: 15
+    money: 0
+    silktouch: true
+  IRON_ORE:
+    xp: 25
+    money: 0
+    silktouch: true
+  GOLD_ORE:
+    xp: 40
+    money: 0
+    silktouch: true
+  DIAMOND_ORE:
+    xp: 100
+    money: 0
+    silktouch: true
+  LAPIS_ORE:
+    xp: 30
+    money: 0
+    silktouch: true
+  REDSTONE_ORE:
+    xp: 20
+    money: 0
+    silktouch: true
+  OBSIDIAN:
+    xp: 50
+    money: 0
+    silktouch: false
+  GRAVEL:
+    xp: 3
+    money: 0
+    silktouch: false
+  SAND:
+    xp: 3
+    money: 0
+    silktouch: false
+  CLAY:
+    xp: 8
+    money: 0
+    silktouch: false
+  NETHERRACK:
+    xp: 5
+    money: 0
+    silktouch: false
+  SOUL_SAND:
+    xp: 8
+    money: 0
+    silktouch: false
+  QUARTZ_ORE:
+    xp: 35
+    money: 0
+    silktouch: true
+  EMERALD_ORE:
+    xp: 120
+    money: 0
+    silktouch: true

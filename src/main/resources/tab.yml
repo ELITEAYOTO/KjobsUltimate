@@ -1,0 +1,297 @@
+# ============================================================
+# KjobsUltimate - Tab List 1.8.8 / 1.8.9
+# ============================================================
+#
+# Le plugin envoie uniquement le header/footer NMS.
+# Il ne modifie pas encore l'ordre ou les colonnes internes des joueurs.
+# Cette approche reste stable et legere pour PandaSpigot/KhopeSpigot.
+
+enabled: true
+
+# 20 ticks = 1 seconde.
+# 40 ticks = 2 secondes, bon compromis pour un serveur charge.
+update_interval_ticks: 40
+
+# true  = applique PlaceholderAPI apres les placeholders natifs.
+# false = plus leger, utile si tu veux limiter le cout par joueur.
+placeholderapi_per_player: true
+
+# ============================================================
+# Nom des joueurs dans la liste Tab
+# ============================================================
+#
+# Option prudente et desactivee par defaut.
+# En 1.8.x, le nom visible dans la liste Tab doit rester court.
+# Le plugin tronque a 16 caracteres par defaut pour eviter les kicks/erreurs.
+#
+# Important :
+# - Cette option ne trie pas encore les joueurs.
+# - Cette option ne cree pas de colonnes.
+# - Elle modifie seulement le nom affiche dans la liste Tab.
+
+player_list_name:
+  enabled: false
+  truncate_to_legacy_limit: true
+  max_length: 16
+  staff_permission: "kjobsultimate.staff"
+  format: "&7%player_name%"
+  staff_format: "&b%player_name%"
+
+# ============================================================
+# Mode legacy
+# ============================================================
+# Utilise si sections.enabled = false.
+
+header: |
+  &6&l* SparrowMC *
+  &7Joueurs en ligne : &e%server_online%&7/&e%server_max_players%
+
+footer: |
+  &7Ton metier : &b%kjob_display_job_name%  &7Lv.&e%kjob_level_%kjob_display_job%%
+  &8SparrowMC.fr
+
+# ============================================================
+# Formats natifs
+# ============================================================
+
+formats:
+  active_job_inline: "&e{job}&7 Lv.&a{level}"
+  active_job_separator: " &8| "
+  active_job_line: "&8- &e{job}&7 Lv.&a{level} &8(&f{percent}%&8)"
+  no_active_jobs: "&7Aucun job"
+
+# ============================================================
+# Mode sections configurables
+# ============================================================
+#
+# Si sections.enabled = true, KjobsUltimate ignore `header` / `footer`
+# et construit le tab avec les sections ci-dessous.
+#
+# Champs par section :
+#   enabled: true/false
+#   condition: always / has_jobs / no_jobs / staff_online / no_staff_online / vault
+#   permission: "permission.node"     # optionnel
+#   line: "texte"                     # une seule ligne
+#   lines:                            # plusieurs lignes
+#     - "texte"
+#
+# Placeholders natifs :
+#   %server_online%
+#   %server_max_players%
+#   %player_name%
+#   %vault_balance%
+#   %vault_balance_raw%
+#   %staff_online%
+#   %staff_count%
+#   %staff_groups_inline%
+#   %staff_groups_lines%
+#   %staff_<groupId>_online%
+#   %staff_<groupId>_count%
+#   %kjob_display_job%
+#   %kjob_display_job_name%
+#   %kjob_slots%
+#   %kjob_unlocked_jobs%
+#   %kjob_global_level%
+#   %kjob_active_jobs_inline%
+#   %kjob_active_jobs_lines%
+#   %kjob_level_<jobId>%
+#   %kjob_xp_<jobId>%
+#   %kjob_xp_next_<jobId>%
+#   %kjob_percent_<jobId>%
+#   %kjob_max_level_<jobId>%
+
+# ============================================================
+# Groupes staff configurables
+# ============================================================
+#
+# Utilisable dans les sections avec :
+#   %staff_admin_online%, %staff_admin_count%
+#   %staff_modo_online%, %staff_modo_count%
+#   %staff_helper_online%, %staff_helper_count%
+#   %staff_groups_lines%
+#
+# Condition de section possible:
+#   condition: staff_group_online:admin
+
+staff_groups:
+  admin:
+    enabled: true
+    permission: "kjobsultimate.admin"
+    format: "&c{player}"
+    separator: "&8, "
+    empty: "&7Aucun"
+    line_format: "&cAdmin &8(&f{count}&8): &f{players}"
+
+  modo:
+    enabled: true
+    permission: "kjobsultimate.staff.modo"
+    format: "&9{player}"
+    separator: "&8, "
+    empty: "&7Aucun"
+    line_format: "&9Modo &8(&f{count}&8): &f{players}"
+
+  helper:
+    enabled: true
+    permission: "kjobsultimate.staff.helper"
+    format: "&b{player}"
+    separator: "&8, "
+    empty: "&7Aucun"
+    line_format: "&bHelper &8(&f{count}&8): &f{players}"
+
+sections:
+  enabled: true
+
+  header:
+    brand:
+      enabled: true
+      condition: always
+      lines:
+        - "&6&l* SparrowMC *"
+        - "&7PvP Faction &8- &e%server_online%&7/&e%server_max_players% &7joueurs"
+
+    player:
+      enabled: true
+      condition: always
+      lines:
+        - "&8"
+        - "&7Joueur: &f%player_name% &8| &7Argent: &e%vault_balance%"
+
+  footer:
+    jobs:
+      enabled: true
+      condition: has_jobs
+      lines:
+        - "&8"
+        - "&6Jobs actifs"
+        - "%kjob_active_jobs_lines%"
+
+    no_jobs:
+      enabled: true
+      condition: no_jobs
+      lines:
+        - "&8"
+        - "&cAucun job selectionne &8- &7/jobs"
+
+    staff:
+      enabled: true
+      condition: staff_online
+      lines:
+        - "&8"
+        - "&bStaff en ligne &8(&f%staff_count%&8)"
+        - "%staff_groups_lines%"
+
+    server:
+      enabled: true
+      condition: always
+      lines:
+        - "&8"
+        - "&8SparrowMC.fr"
+
+# ============================================================
+# Mode colonnes virtuelles - Prototype
+# ============================================================
+#
+# Desactive par defaut.
+# Ce mode ajoute des lignes fake dans la zone centrale du TAB via NMS
+# PacketPlayOutPlayerInfo. Il doit etre teste avec Panda/KhopeSpigot
+# avant activation en prod.
+#
+# Important:
+# - KjobsUltimate ne gere que ses entrees avec le prefix technique ci-dessous.
+# - Ne pas utiliser le meme prefix dans un autre plugin.
+# - Plus max_rows est haut, plus le nombre de packets peut augmenter.
+
+virtual_layout:
+  enabled: false
+  # ROW_LINES = ancien prototype: 1 ligne fake contient toutes les colonnes.
+  # PACKED_COLUMNS = force le client 1.8 a creer de vraies colonnes de fake players.
+  layout_mode: PACKED_COLUMNS
+  columns_enabled: true
+  update_interval_ticks: 60
+  max_rows: 20
+  remove_on_disable: true
+  debug: false
+  bottom_lines_enabled: false
+  faction_members_limit: 8
+
+  ordering:
+    technical_name_prefix: "!kjt_"
+    stable_uuid_seed: "kjobsultimate-tab"
+    start_index: 1
+
+  render:
+    separator: " &8| "
+    empty_cell: ""
+    truncate_cells: true
+    # true = aligne selon une estimation de la largeur pixel de la police Minecraft.
+    # false = aligne au nombre de caracteres, moins propre en jeu.
+    pixel_alignment: true
+    cell_width_default: 24
+    cell_width_pixels_default: 132
+
+  # Mode PACKED_COLUMNS:
+  # Le client 1.8 ne cree plusieurs colonnes que quand il y a assez d'entrees.
+  # Le client garde jusqu'a 20 lignes par colonne et compte aussi les vrais joueurs.
+  # Avec 3 colonnes, 15 lignes et 1 vrai joueur reserve, on envoie 44 fake entries.
+  # Les lignes vides restent des fake players: elles auront donc aussi une tete.
+  packed_columns:
+    columns: 3
+    rows: 15
+    max_entries: 44
+    force_client_rows: true
+    reserve_real_entries: 1
+    # Masque les entrées vanilla des joueurs dans la grille virtuelle. Le
+    # nombre de connectés reste disponible via %server_online%.
+    hide_real_players: false
+    blank_text: "&8"
+    cell_prefix: "&8| "
+    cell_suffix: ""
+
+  # Optionnel: skin appliquee aux fake players du tab.
+  # Pour une skin custom fiable, il faut un value/signature Mojang signe.
+  # Plus simple: tu peux mettre texture_hash avec le hash d'une tete minecraft.
+  # cache_key force de nouveaux UUID fake si le client garde l'ancien skin en cache.
+  # Sans texture, le client affiche la tete Steve/Alex par defaut.
+  fake_skin:
+    enabled: false
+    cache_key: ""
+    texture_hash: ""
+    texture_url: ""
+    value: ""
+    signature: ""
+
+  columns:
+    staff:
+      enabled: true
+      title: "&bStaff"
+      width: 24
+      width_pixels: 126
+      lines:
+        - "%staff_admin_online%"
+        - "%staff_modo_online%"
+        - "%staff_helper_online%"
+
+    jobs:
+      enabled: true
+      title: "&6Jobs"
+      width: 26
+      width_pixels: 144
+      lines:
+        - "%kjob_display_job_name%: Lv.%kjob_level_%kjob_display_job%%"
+        - "%kjob_active_jobs_lines%"
+
+    faction:
+      enabled: true
+      title: "&aFaction"
+      width: 30
+      width_pixels: 168
+      lines:
+        - "Faction: %kfaction_name%"
+        - "Role: %kfaction_role%"
+        - "Joueurs:"
+        - "%kfaction_members_lines%"
+
+  bottom_lines:
+    - "&6Argent: &e%vault_balance% &8| &7Rank: %rank_name%"
+    - "&7Joueurs en ligne: &f%server_online%&7/&f%server_max_players%"
+    - "&eVolkaria.fr"

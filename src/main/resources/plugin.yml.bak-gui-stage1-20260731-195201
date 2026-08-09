@@ -1,0 +1,104 @@
+name: KjobsUltimate
+version: ${project.version}
+main: me.krunsh.kjobultimate.KjobUltimate
+api-version: '1.8'
+description: Systeme de jobs complet pour SparrowMC
+author: krunsh
+
+softdepend:
+  - Vault
+  - PlaceholderAPI
+  - Kgui
+  - Kcraft
+  - KStacker
+  - Kfaction
+  - Kenchantement
+  - WorldGuard
+  - CombatTagPlus
+
+commands:
+  jobs:
+    description: Ouvre le menu des metiers
+    usage: /jobs [help|top|infos|stats|join|leave|select|hud|quests|confirm|cancel]
+    aliases: [job, metier, metiers]
+    permission: kjobsultimate.use
+  kjobs:
+    description: Commandes staff KjobsUltimate
+    usage: /kjobs <sous-commande>
+    aliases: [kjob, kjobadmin, kjobadm]
+    permission: kjobsultimate.admin
+
+permissions:
+  kjobsultimate.use:
+    description: Utiliser /jobs
+    default: true
+  kjobsultimate.admin:
+    description: Commandes admin KjobsUltimate
+    default: op
+    children:
+      kjobsultimate.admin.reload: true
+      kjobsultimate.admin.status: true
+      kjobsultimate.admin.info: true
+      kjobsultimate.admin.history: true
+      kjobsultimate.admin.xp: true
+      kjobsultimate.admin.level: true
+      kjobsultimate.admin.reset: true
+      kjobsultimate.admin.force: true
+      kjobsultimate.admin.reward: true
+      kjobsultimate.admin.backup: true
+      kjobsultimate.admin.debug: true
+      kjobsultimate.staff: true
+      kjobsultimate.staff.modo: true
+      kjobsultimate.staff.helper: true
+  kjobsultimate.admin.*:
+    description: Toutes les permissions admin KjobsUltimate
+    default: op
+    children:
+      kjobsultimate.admin: true
+  kjobsultimate.staff:
+    description: Affiche le joueur dans la section staff du tab KjobsUltimate
+    default: op
+  kjobsultimate.staff.modo:
+    description: Affiche le joueur dans le groupe modo du tab KjobsUltimate
+    default: op
+  kjobsultimate.staff.helper:
+    description: Affiche le joueur dans le groupe helper du tab KjobsUltimate
+    default: op
+  kjobsultimate.bypass.gamemodecheck:
+    description: Gagner XP en mode creatif/spectateur
+    default: false
+  kjobsultimate.xp.vip:
+    description: Multiplicateur XP VIP x1.25
+    default: false
+  kjobsultimate.xp.premium:
+    description: Multiplicateur XP Premium x1.5
+    default: false
+  kjobsultimate.xp.youtuber:
+    description: Multiplicateur XP Youtuber x2.0
+    default: false
+
+  # Compat legacy pendant la refonte
+  kjob.use:
+    description: Ancienne permission joueur
+    default: true
+    children:
+      kjobsultimate.use: true
+  kjob.admin:
+    description: Ancienne permission admin
+    default: op
+    children:
+      kjobsultimate.admin: true
+  kjob.bypass.gamemodecheck:
+    description: Ancienne permission bypass gamemode
+    default: false
+    children:
+      kjobsultimate.bypass.gamemodecheck: true
+  kjob.xp.vip:
+    description: Ancienne permission VIP
+    default: false
+  kjob.xp.premium:
+    description: Ancienne permission Premium
+    default: false
+  kjob.xp.youtuber:
+    description: Ancienne permission Youtuber
+    default: false

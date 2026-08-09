@@ -1,0 +1,23 @@
+/target/
+/dependency-reduced-pom.xml
+
+# IDE and local tooling
+/.idea/
+/.vscode/
+/.settings/
+/.classpath
+/.project
+*.iml
+
+# Runtime and diagnostics
+/logs/
+/plugins/
+*.log
+*.hprof
+hs_err_pid*
+replay_pid*
+
+# OS metadata
+.DS_Store
+Thumbs.db
+

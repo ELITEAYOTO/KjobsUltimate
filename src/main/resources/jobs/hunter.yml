@@ -1,0 +1,160 @@
+# ============================================================
+# KjobsUltimate — Job : Hunter
+# ============================================================
+#
+# GUIDE DE CONFIGURATION D'UN JOB
+# ─────────────────────────────────────────────────────────────
+# Voir jobs/mineur.yml pour la documentation complète de tous les champs.
+# Recharger à chaud : /kjobs reload
+#
+# NOTES SPÉCIFIQUES AU HUNTER
+# ─────────────────────────────────────────────────────────────
+# CLÉ D'ACTION = nom de l'EntityType Bukkit 1.8.8 EN MAJUSCULES.
+#   Le kill du mob déclenche EntityDeathEvent (entity.getKiller() = joueur).
+#   EntityTypes disponibles en 1.8.8 :
+#     Mobs hostiles  : ZOMBIE, SKELETON, SPIDER, CREEPER, ENDERMAN, BLAZE,
+#                      GHAST, WITCH, CAVE_SPIDER, WITHER_SKELETON, MAGMA_CUBE,
+#                      SLIME, SILVERFISH, GUARDIAN, PIG_ZOMBIE (ZombiePigman)
+#     Mobs passifs   : PIG, COW, SHEEP, CHICKEN, RABBIT, SQUID, BAT
+#     Mobs neutres   : WOLF, OCELOT, IRON_GOLEM, SNOWMAN, VILLAGER
+#     Bosses         : ENDER_DRAGON (XP élevé recommandé), WITHER
+#     Sous-types Zombie (via nom EntityType) : ZOMBIE (tous les types de zombie)
+#
+# INTÉGRATION KSTACKER
+#   Si Kstacker est actif et qu'une entité stackable meurt, Kstacker déclenche
+#   plusieurs EntityDeathEvent via des entités fantomes ("ghost").
+#   HunterListener détecte automatiquement le multiplicateur Kstacker via :
+#     entity.getMetadata("kstacker-ghost")      = entité fantome
+#     entity.getMetadata("kstacker-multiplier") = nombre de mobs dans le stack
+#   XP = xp_base × min(kstacker_multiplier, STACK_CAP)
+#   STACK_CAP = 3 (configurable dans HunterListener.java — évite l'abus de stacks géants).
+#
+# SILK TOUCH
+#   silktouch n'a aucun effet sur le Hunter (pas de tool check).
+#   Garder silktouch: false pour tous les mobs.
+
+display_name: "§cHunter"
+description: "§7Chasse les monstres et récolte leurs ressources."
+icon:
+  material: BOW
+  nbt_cit: "job_hunter_icon"
+max_level: 50
+
+xp_curve:
+  type: custom
+  fallback_type: linear
+  fallback_base: 900
+  fallback_multiplier: 1.28
+  custom_levels:
+    1: 900
+    2: 1400
+    3: 2000
+    4: 2800
+    5: 3900
+    6: 5300
+    7: 7000
+    8: 9200
+    9: 12000
+    10: 15500
+
+daily_xp_cap: 0
+
+bossbar:
+  color: RED
+  style: SOLID
+
+level_rewards:
+  5:
+    - "eco give {player} 400"
+  10:
+    - "eco give {player} 1500"
+    - "broadcast §c{player} §fpasse §cniveau 10 §fHunter !"
+  25:
+    - "eco give {player} 8000"
+  50:
+    - "eco give {player} 40000"
+    - "broadcast §c{player} §fa atteint le §cniveau MAXIMUM §fdu job Hunter !"
+
+# ─────────────────────────────────────────────────────────────
+# ACTIONS DU HUNTER : entités à tuer pour gagner XP + argent
+# ─────────────────────────────────────────────────────────────
+# Déclenché par EntityDeathEvent. Clé = EntityType Bukkit 1.8.8 EN MAJUSCULES.
+# Avec Kstacker actif : chaque entité fantome (ghost) déclenche son propre
+# EntityDeathEvent. Le killMultiplier Kstacker est pris en compte automatiquement.
+# XP = xp_base × min(kstacker_multiplier, 3) — cap à 3 par défaut (HunterListener).
+#
+# EntityTypes Bukkit 1.8.8 :
+#   Mobs hostiles  : ZOMBIE, SKELETON, SPIDER, CREEPER, ENDERMAN, BLAZE,
+#                    GHAST, WITCH, CAVE_SPIDER, WITHER_SKELETON, MAGMA_CUBE,
+#                    SLIME, SILVERFISH, GUARDIAN, PIG_ZOMBIE
+#   Mobs passifs   : PIG, COW, SHEEP, CHICKEN, RABBIT, SQUID, BAT
+#   Mobs neutres   : WOLF, OCELOT, IRON_GOLEM, SNOWMAN, VILLAGER
+#   Bosses         : ENDER_DRAGON, WITHER
+#
+# Conseils de équilibrage :
+#   - Mobs communs (ZOMBIE, SKELETON) : xp 10–30
+#   - Mobs dangereux (BLAZE, GHAST, GUARDIAN) : xp 40–70
+#   - Rares / difficiles (WITHER_SKELETON, ENDER_DRAGON) : xp 100–500
+#
+# silktouch: false pour TOUS les mobs (sans effet sur les entités).
+actions:
+  ZOMBIE:
+    xp: 15
+    money: 0
+    silktouch: false
+  SKELETON:
+    xp: 20
+    money: 0
+    silktouch: false
+  SPIDER:
+    xp: 15
+    money: 0
+    silktouch: false
+  CREEPER:
+    xp: 25
+    money: 0
+    silktouch: false
+  ENDERMAN:
+    xp: 40
+    money: 0
+    silktouch: false
+  BLAZE:
+    xp: 35
+    money: 0
+    silktouch: false
+  GHAST:
+    xp: 50
+    money: 0
+    silktouch: false
+  WITCH:
+    xp: 45
+    money: 0
+    silktouch: false
+  CAVE_SPIDER:
+    xp: 20
+    money: 0
+    silktouch: false
+  WITHER_SKELETON:
+    xp: 60
+    money: 0
+    silktouch: false
+  MAGMA_CUBE:
+    xp: 20
+    money: 0
+    silktouch: false
+  SLIME:
+    xp: 10
+    money: 0
+    silktouch: false
+  SILVERFISH:
+    xp: 8
+    money: 0
+    silktouch: false
+  PIG_ZOMBIE:
+    xp: 25
+    money: 0
+    silktouch: false
+  GUARDIAN:
+    xp: 55
+    money: 0
+    silktouch: false

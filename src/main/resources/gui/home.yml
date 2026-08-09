@@ -1,0 +1,463 @@
+enabled: true
+title: "&6Jobs"
+size: 27
+
+filler:
+  enabled: true
+  material: STAINED_GLASS_PANE
+  data: 15
+  name: " "
+  lore: []
+
+items:
+  favorite:
+    slot: 13
+    material: BOOK
+    name: "&6{job}"
+    lore:
+      - "&7Job favori"
+      - "&7Niveau: &e{level}&7/&e{max_level}"
+      - "&7XP: &a{xp}&7/&a{xp_next} &8({percent}%)"
+      - "&7Global: &e{global_level}"
+    click_actions:
+      - "[sound] CLICK 1.0 1.0"
+      - "[open] detail:{job_id}"
+  favorite_empty:
+    slot: 13
+    material: EMPTY_MAP
+    name: "&cAucun job"
+    lore:
+      - "&7Choisis un premier job."
+    click_actions:
+      - "[sound] CLICK 1.0 1.0"
+      - "[open] jobs"
+  jobs_list:
+    slot: 11
+    material: CHEST
+    name: "&eListe des jobs"
+    lore:
+      - "&7Debloques: &e{unlocked}&7/&e{slots}"
+      - "&7Niveau global: &e{global_level}"
+      - "&aClique pour ouvrir."
+    click_actions:
+      - "[sound] CLICK 1.0 1.0"
+      - "[open] jobs"
+  quests:
+    slot: 10
+    material: BOOK_AND_QUILL
+    name: "&eQuetes"
+    lore:
+      - "&7Progression permanente."
+      - "&7A recuperer: &a{claimable_quests}"
+      - "&aClique pour ouvrir."
+    click_actions:
+      - "[sound] CLICK 1.0 1.0"
+      - "[open] quests"
+  hud_toggle:
+    slot: 15
+    material: WATCH
+    name: "&eParametres HUD"
+    lore:
+      - "&7Etat: {status}"
+      - "&aClique pour ouvrir."
+    click_actions:
+      - "[sound] CLICK 1.0 1.0"
+      - "[open] settings"
+  top:
+    slot: 16
+    material: GOLD_INGOT
+    name: "&eClassements"
+    lore:
+      - "&7Global, jobs et position joueur."
+      - "&aClique pour ouvrir."
+    click_actions:
+      - "[sound] CLICK 1.0 1.0"
+      - "[open] top"
+  leave:
+    slot: 22
+    material: BARRIER
+    name: "&cQuitter {job}"
+    lore:
+      - "&cAttention: reset progression."
+      - "&7Une confirmation sera demandee."
+    click_actions:
+      - "[sound] CLICK 1.0 1.0"
+      - "[leave_confirm] {job_id}"
+    click_requirements:
+      - "job_unlocked: {job_id}"
+    deny_actions:
+      - "[sound] VILLAGER_NO 1.0 1.0"
+      - "[message] {prefix}&cTu ne peux pas quitter un job non debloque."
+    cooldown: 1
+
+confirm_leave:
+  title: "&cQuitter {job}"
+  size: 27
+  filler:
+    enabled: true
+    material: STAINED_GLASS_PANE
+    data: 15
+    name: " "
+    lore: []
+  items:
+    job:
+      slot: 13
+      material: BOOK # fallback; l'icone vient de jobs/<job>.yml -> icon
+      name: "&e{job}"
+      lore:
+        - "&7Metier concerne par cette confirmation."
+    confirm:
+      slot: 11
+      material: STAINED_CLAY
+      data: 5
+      name: "&aConfirmer"
+      lore:
+        - "&7Quitter &e{job}&7."
+        - "&cLa progression sera supprimee."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[leave_confirmed] {job_id}"
+      click_requirements:
+        - "job_unlocked: {job_id}"
+      deny_actions:
+        - "[sound] VILLAGER_NO 1.0 1.0"
+        - "[message] {prefix}&cCe job n'est plus debloque."
+      cooldown: 2
+    cancel:
+      slot: 15
+      material: STAINED_CLAY
+      data: 14
+      name: "&cAnnuler"
+      lore:
+        - "&7Retour au menu jobs."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[open] home"
+
+settings:
+  title: "&6Parametres Jobs"
+  size: 27
+  filler:
+    enabled: true
+    material: STAINED_GLASS_PANE
+    data: 15
+    name: " "
+    lore: []
+  items:
+    hud_toggle:
+      slot: 11
+      material: WATCH
+      name: "&eHUD Jobs global"
+      lore:
+        - "&7Etat global: {hud_status}"
+        - "&7BossBar: {bossbar_status}"
+        - "&7ActionBar: {actionbar_status}"
+        - "&aClique pour tout activer/desactiver."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[toggle_hud]"
+      cooldown: 1
+    bossbar_toggle:
+      slot: 13
+      material: NETHER_STAR
+      name: "&dBossBar Jobs"
+      lore:
+        - "&7Etat: {bossbar_status}"
+        - "&7Affiche la progression en haut de l'ecran."
+        - "&aClique pour basculer."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[toggle_bossbar]"
+      cooldown: 1
+    actionbar_toggle:
+      slot: 15
+      material: PAPER
+      name: "&bActionBar Jobs"
+      lore:
+        - "&7Etat: {actionbar_status}"
+        - "&7Affiche les gains d'XP au-dessus de la hotbar."
+        - "&aClique pour basculer."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[toggle_actionbar]"
+      cooldown: 1
+    back:
+      slot: 22
+      material: ARROW
+      name: "&eRetour"
+      lore:
+        - "&7Retour au menu principal."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[open] home"
+
+quests:
+  title: "&6Quetes {target} &8- Page {page}"
+  size: 54
+  filter_job_slots: [1, 2, 3, 4, 5, 6]
+  filler:
+    enabled: true
+    material: STAINED_GLASS_PANE
+    data: 15
+    name: " "
+    lore: []
+    slots: "45-53"
+  items:
+    filter_all:
+      slot: 0
+      material: COMPASS
+      name: "&eToutes"
+      lore:
+        - "&7Voir toutes les quetes."
+        - "&7Filtre actuel: &e{target}"
+        - "&aClique pour filtrer."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[quests] all"
+      cooldown: 1
+    filter_all_selected:
+      slot: 0
+      material: EMERALD
+      name: "&aToutes &7({filter_status})"
+      lore:
+        - "&7Toutes les quetes sont affichees."
+        - "&7Total: &e{total}"
+        - "&a{selected}"
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[quests] all"
+      cooldown: 1
+    filter_job:
+      material: BOOK
+      name: "&e{job}"
+      lore:
+        - "&7Voir uniquement ce job."
+        - "&7Etat: {filter_status}"
+        - "&aClique pour filtrer."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[quests] {job_id}"
+      cooldown: 1
+    filter_job_selected:
+      material: ENCHANTED_BOOK
+      name: "&a{job} &7({filter_status})"
+      lore:
+        - "&7Filtre actif."
+        - "&7Total: &e{total}"
+        - "&a{selected}"
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[quests] {job_id}"
+      cooldown: 1
+    quest:
+      in_progress:
+        slots: "10-16,19-25,28-34"
+        material: PAPER
+        name: "&e{quest}"
+        lore:
+          - "&7Job: {job}"
+          - "&7Statut: {quest_status}"
+          - "&7Objectif: &f{target}"
+          - "&7Progression: &a{progress}&7/&a{amount} &8({percent}%)"
+          - "&7Recompense XP: &b{reward_xp}"
+      claimable:
+        slots: "10-16,19-25,28-34"
+        material: ENCHANTED_BOOK
+        name: "&a{quest}"
+        lore:
+          - "&7Job: {job}"
+          - "&7Statut: {quest_status}"
+          - "&7Progression: &a{progress}&7/&a{amount} &8(100%)"
+          - "&7Recompense XP: &b{reward_xp}"
+          - ""
+          - "&aClique pour recuperer."
+        click_actions:
+          - "[sound] CLICK 1.0 1.0"
+          - "[quest_claim] {quest_id}"
+        cooldown: 1
+      claimed:
+        slots: "10-16,19-25,28-34"
+        material: BOOK
+        name: "&8{quest}"
+        lore:
+          - "&7Job: {job}"
+          - "&7Statut: {quest_status}"
+          - "&7Progression: &a{progress}&7/&a{amount}"
+          - "&8Recompense deja recuperee."
+    empty:
+      slot: 22
+      material: BARRIER
+      name: "&cAucune quete"
+      lore:
+        - "&7Aucune quete disponible pour &e{target}&7."
+    previous:
+      slot: 45
+      material: ARROW
+      name: "&ePage precedente"
+      lore:
+        - "&7Aller page &e{previous_page}&7."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[quests] previous"
+      cooldown: 1
+    next:
+      slot: 53
+      material: ARROW
+      name: "&ePage suivante"
+      lore:
+        - "&7Aller page &e{next_page}&7."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[quests] next"
+      cooldown: 1
+    refresh:
+      slot: 49
+      material: REDSTONE_COMPARATOR
+      name: "&eActualiser"
+      lore:
+        - "&7Recharge les quetes."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[quests] refresh"
+      cooldown: 2
+    back:
+      slot: 52
+      material: ARROW
+      name: "&eRetour"
+      lore:
+        - "&7Retour au menu principal."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[open] home"
+
+top:
+  selector_title: "&6Classements Jobs"
+  size: 27
+  job_slots: [10, 11, 12, 13, 14, 15]
+  filler:
+    enabled: true
+    material: STAINED_GLASS_PANE
+    data: 15
+    name: " "
+    lore: []
+  items:
+    global:
+      slot: 13
+      material: GOLD_BLOCK
+      name: "&6Top global"
+      lore:
+        - "&7Classement total de tous les jobs."
+        - "&aClique pour ouvrir."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[top] global"
+      cooldown: 1
+    job:
+      material: BOOK
+      name: "&eTop {job}"
+      lore:
+        - "&7Statut: {status}"
+        - "&7Ton niveau: &e{level}"
+        - "&7Ton XP: &a{xp}"
+        - "&aClique pour ouvrir."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[top] {job_id}"
+      cooldown: 1
+    back:
+      slot: 22
+      material: ARROW
+      name: "&eRetour"
+      lore:
+        - "&7Retour au menu principal."
+      click_actions:
+        - "[sound] CLICK 1.0 1.0"
+        - "[open] home"
+  ranking:
+    title: "&6Top {target} &8- Page {page}"
+    size: 54
+    filler:
+      enabled: true
+      material: STAINED_GLASS_PANE
+      data: 15
+      name: " "
+      lore: []
+      slots: "45-53"
+    items:
+      loading:
+        slot: 22
+        material: WATCH
+        name: "&eChargement..."
+        lore:
+          - "&7Classement: &e{target}"
+          - "&7Lecture DB en cours."
+      empty:
+        slot: 22
+        material: BARRIER
+        name: "&cAucun resultat"
+        lore:
+          - "&7Aucune donnee pour &e{target}&7."
+      entry:
+        slots: "0-44"
+        material: PAPER
+        name: "&e#{position} &f{name}"
+        lore:
+          - "&7Classement: &e{target}"
+          - "&7Niveau: &a{level}"
+          - "&7XP: &b{xp}"
+          - "&8UUID: {uuid}"
+      own_rank:
+        slot: 49
+        material: NETHER_STAR
+        name: "&eTon classement"
+        lore:
+          - "&7Top: &e{target}"
+          - "&7Rang: &a{rank}"
+      previous:
+        slot: 45
+        material: ARROW
+        name: "&ePage precedente"
+        lore:
+          - "&7Aller page &e{previous_page}&7."
+        click_actions:
+          - "[sound] CLICK 1.0 1.0"
+          - "[top] previous"
+        cooldown: 1
+      next:
+        slot: 53
+        material: ARROW
+        name: "&ePage suivante"
+        lore:
+          - "&7Aller page &e{next_page}&7."
+        click_actions:
+          - "[sound] CLICK 1.0 1.0"
+          - "[top] next"
+        cooldown: 1
+      refresh:
+        slot: 48
+        material: REDSTONE_COMPARATOR
+        name: "&eActualiser"
+        lore:
+          - "&7Recharge le top &e{target}&7."
+        click_actions:
+          - "[sound] CLICK 1.0 1.0"
+          - "[top] refresh"
+        cooldown: 2
+      selector:
+        slot: 50
+        material: CHEST
+        name: "&eChoisir un classement"
+        lore:
+          - "&7Retour au choix global/jobs."
+        click_actions:
+          - "[sound] CLICK 1.0 1.0"
+          - "[top] selector"
+      back:
+        slot: 52
+        material: BARRIER
+        name: "&cRetour"
+        lore:
+          - "&7Retour au menu principal."
+        click_actions:
+          - "[sound] CLICK 1.0 1.0"
+          - "[open] home"
