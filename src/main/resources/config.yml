@@ -1,9 +1,9 @@
 # ============================================================
-# KjobsUltimate V3.14 — Configuration principale
+# KjobsUltimate V3.14.1 — Configuration principale
 # Minecraft 1.8.8 / Java 8
 # ============================================================
 #
-# Base V2/V3 propre : aucune clé legacy n'est nécessaire.
+# Base V2/V3 propre : aucune clé legacy n'est supportée.
 # Rechargement : /kjobs reload
 
 # ─── Debug ──────────────────────────────────────────────────

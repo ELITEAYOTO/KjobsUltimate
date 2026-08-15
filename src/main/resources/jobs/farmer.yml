@@ -1,36 +1,29 @@
 # ============================================================
-# KjobsUltimate — Job : Farmer
+# KjobsUltimate V3.14.1 — Job : Farmer
 # ============================================================
 #
-# Bukkit 1.8.8 :
-#   Le BLOC de blé est CROPS (ID 59).
-#   WHEAT reste uniquement le Material utilisé comme icône/item.
-#   Il n'existe plus d'alias d'action WHEAT dans la base V2 propre.
+# Base propre :
+# - max_level = 50
+# - courbe XP explicite 1 -> 50, sans fallback partiel
+# - aucune compatibilite d'ancienne config
+# - XP / money / quete utilisent le meme accounting V3.13+
 #
-# Récoltes verticales :
-#   SUGAR_CANE_BLOCK et CACTUS peuvent compter plusieurs unités lorsque le
-#   joueur casse un bloc sous d'autres blocs identiques.
-#
-# Exemple :
-#   canne Y66
-#   canne Y65 <- cassée
-#   canne Y64
-#   => units=2 (Y65 + Y66), jamais Y64.
-#
-# La quantité units est utilisée simultanément pour XP + money + quête.
+# Bukkit 1.8.8 : le bloc de ble est CROPS. WHEAT sert uniquement d'icone/item.
 
 display_name: "§aFarmer"
 description: "§7Cultive la terre et récolte les ressources naturelles."
+
 icon:
   material: WHEAT
   nbt_cit: "job_farmer_icon"
+
 max_level: 50
 
 xp_curve:
   type: custom
   fallback_type: linear
   fallback_base: 800
-  fallback_multiplier: 1.25
+  fallback_multiplier: 1.0
   custom_levels:
     1: 800
     2: 1200
@@ -42,6 +35,46 @@ xp_curve:
     8: 8500
     9: 11000
     10: 14000
+    11: 15300
+    12: 16800
+    13: 18400
+    14: 20100
+    15: 22000
+    16: 24100
+    17: 26400
+    18: 28900
+    19: 31600
+    20: 34600
+    21: 37900
+    22: 41500
+    23: 45400
+    24: 49700
+    25: 54400
+    26: 59600
+    27: 65300
+    28: 71500
+    29: 78300
+    30: 85700
+    31: 93800
+    32: 102700
+    33: 112500
+    34: 123200
+    35: 134900
+    36: 147700
+    37: 161700
+    38: 177100
+    39: 193900
+    40: 212300
+    41: 232500
+    42: 254600
+    43: 278800
+    44: 305300
+    45: 334300
+    46: 366100
+    47: 400900
+    48: 439000
+    49: 480700
+    50: 526400
 
 daily_xp_cap: 0
 
@@ -51,15 +84,15 @@ bossbar:
 
 level_rewards:
   5:
-    - "eco give {player} 300"
+    - "[console] eco give {player} 300"
   10:
-    - "eco give {player} 1000"
-    - "broadcast §a{player} §fpasse §aniveau 10 §fFarmer !"
+    - "[console] eco give {player} 1000"
+    - "[console] broadcast §a{player} §fpasse §aniveau 10 §fFarmer !"
   25:
-    - "eco give {player} 6000"
+    - "[console] eco give {player} 6000"
   50:
-    - "eco give {player} 30000"
-    - "broadcast §a{player} §fa atteint le §aniveau MAXIMUM §fdu job Farmer !"
+    - "[console] eco give {player} 30000"
+    - "[console] broadcast §a{player} §fa atteint le §aniveau MAXIMUM §fdu job Farmer !"
 
 actions:
   CROPS:

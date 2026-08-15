@@ -1,51 +1,29 @@
 # ============================================================
-# KjobsUltimate — Job : Prétorien
+# KjobsUltimate V3.14.1 — Job : Prétorien
 # ============================================================
 #
-# GUIDE DE CONFIGURATION D'UN JOB
-# ─────────────────────────────────────────────────────────────
-# Voir jobs/mineur.yml pour la documentation complète de tous les champs.
-# Recharger à chaud : /kjobs reload
+# Base propre :
+# - max_level = 50
+# - courbe XP explicite 1 -> 50, sans fallback partiel
+# - aucune compatibilite d'ancienne config
+# - XP / money / quete utilisent le meme accounting V3.13+
 #
-# NOTES SPÉCIFIQUES AU PRÉTORIEN
-# ─────────────────────────────────────────────────────────────
-# CLÉ D'ACTION
-#   Le Prétorien n'a qu'UNE SEULE action possible : "pvp_kill".
-#   C'est la clé utilisée par PretorienListener pour chercher la récompense.
-#   NE PAS changer cette clé sans modifier PretorienListener.java en conséquence.
-#
-# ÉVÉNEMENT DÉCLENCHEUR
-#   Déclenché sur PlayerDeathEvent quand une victime meurt et que victim.getKiller()
-#   est non nul et différent de la victime elle-même (pas de suicide).
-#   L'auto-kill (creeper sur soi, chute, etc.) NE déclenche PAS de gain XP.
-#
-# ANTI-FARM PVP (pvp_target_cooldown dans config.yml)
-#   Cooldown en secondes entre deux kills PvP sur LA MÊME victime.
-#   Stockage : UUID de la victime → timestamp d'expiration (en RAM uniquement).
-#   Réinitialisé au restart serveur (comportement intentionnel).
-#   Exemple : pvp_target_cooldown: 3600 = 1 kill par victime par heure max.
-#
-# XP PAR KILL
-#   Le champ "xp" représente l'XP brut accordé par kill (avant multiplicateurs).
-#   Pour différencier l'XP selon le rang de la victime, il faudra un
-#   système externe (Phase future) ou donner plus d'argent via les commandes
-#   level_rewards plutôt que via le gain XP direct.
-#
-# SILK TOUCH
-#   silktouch n'a aucun effet sur le Prétorien. Garder silktouch: false.
+# Une seule action metier : pvp_kill. L'anti-farm se configure dans anti_abuse.pvp.
 
 display_name: "§6Prétorien"
-description: "§7Combattant PvP d'élite — protège la faction et gagne de l'XP en combat."
+description: "§7Combattant PvP d'élite — protège la faction et progresse en combat."
+
 icon:
   material: IRON_SWORD
   nbt_cit: "job_pretorien_icon"
+
 max_level: 50
 
 xp_curve:
   type: custom
   fallback_type: linear
   fallback_base: 1200
-  fallback_multiplier: 1.35
+  fallback_multiplier: 1.0
   custom_levels:
     1: 1200
     2: 1900
@@ -57,6 +35,46 @@ xp_curve:
     8: 13800
     9: 18000
     10: 23000
+    11: 25300
+    12: 27800
+    13: 30600
+    14: 33700
+    15: 37100
+    16: 40800
+    17: 44900
+    18: 49400
+    19: 54300
+    20: 59700
+    21: 65700
+    22: 72300
+    23: 79500
+    24: 87400
+    25: 96100
+    26: 105700
+    27: 116300
+    28: 127900
+    29: 140700
+    30: 154800
+    31: 170300
+    32: 187300
+    33: 206000
+    34: 226600
+    35: 249300
+    36: 274200
+    37: 301600
+    38: 331800
+    39: 365000
+    40: 401500
+    41: 441700
+    42: 485900
+    43: 534500
+    44: 588000
+    45: 646800
+    46: 711500
+    47: 782700
+    48: 861000
+    49: 947100
+    50: 1041800
 
 daily_xp_cap: 0
 
@@ -66,26 +84,16 @@ bossbar:
 
 level_rewards:
   5:
-    - "eco give {player} 600"
+    - "[console] eco give {player} 600"
   10:
-    - "eco give {player} 2500"
-    - "broadcast §6{player} §fpasse §6niveau 10 §fPrétorien !"
+    - "[console] eco give {player} 2500"
+    - "[console] broadcast §6{player} §fpasse §6niveau 10 §fPrétorien !"
   25:
-    - "eco give {player} 15000"
+    - "[console] eco give {player} 15000"
   50:
-    - "eco give {player} 75000"
-    - "broadcast §6{player} §fa atteint le §6niveau MAXIMUM §fdu job Prétorien !"
+    - "[console] eco give {player} 75000"
+    - "[console] broadcast §6{player} §fa atteint le §6niveau MAXIMUM §fdu job Prétorien !"
 
-# ─────────────────────────────────────────────────────────────
-# ACTION DU PRÉTORIEN : tuer un joueur en PvP
-# ─────────────────────────────────────────────────────────────
-# Déclenché par PlayerDeathEvent (player.getKiller() != null && != victim).
-# UNE SEULE action possible : "pvp_kill". NE PAS renommer cette clé.
-# Anti-farm : pvp_target_cooldown (secondes) depuis config.yml.
-#
-# xp    : XP brut par kill PvP (avant multiplicateurs).
-# money : argent versé via Vault par kill.
-# silktouch: false (sans effet sur le PvP).
 actions:
   pvp_kill:
     xp: 100

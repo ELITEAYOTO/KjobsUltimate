@@ -1,19 +1,29 @@
 # ============================================================
-# KjobsUltimate — Job : Pilleur
+# KjobsUltimate V3.14.1 — Job : Pilleur
 # ============================================================
+#
+# Base propre :
+# - max_level = 50
+# - courbe XP explicite 1 -> 50, sans fallback partiel
+# - aucune compatibilite d'ancienne config
+# - XP / money / quete utilisent le meme accounting V3.13+
+#
+# TNT / dynamite. Les crafts utilisent RESULT_ITEMS pour le shift-click.
 
 display_name: "§5Pilleur"
-description: "§7Gagne de l'XP en pillant avec TNT et dynamite."
+description: "§7Progresse en utilisant TNT et dynamite."
+
 icon:
   material: TNT
   nbt_cit: "job_pilleur_icon"
+
 max_level: 50
 
 xp_curve:
-  type: linear
+  type: custom
   fallback_type: linear
   fallback_base: 800
-  fallback_multiplier: 1.24
+  fallback_multiplier: 1.0
   custom_levels:
     1: 800
     2: 1200
@@ -25,6 +35,46 @@ xp_curve:
     8: 7000
     9: 9000
     10: 11500
+    11: 12700
+    12: 14000
+    13: 15400
+    14: 16900
+    15: 18600
+    16: 20500
+    17: 22600
+    18: 24900
+    19: 27400
+    20: 30100
+    21: 33100
+    22: 36400
+    23: 40000
+    24: 44000
+    25: 48400
+    26: 53200
+    27: 58500
+    28: 64400
+    29: 70800
+    30: 77900
+    31: 85700
+    32: 94300
+    33: 103700
+    34: 114100
+    35: 125500
+    36: 138000
+    37: 151800
+    38: 167000
+    39: 183700
+    40: 202100
+    41: 222300
+    42: 244500
+    43: 269000
+    44: 295900
+    45: 325500
+    46: 358000
+    47: 393800
+    48: 433200
+    49: 476500
+    50: 524200
 
 daily_xp_cap: 0
 
@@ -34,15 +84,15 @@ bossbar:
 
 level_rewards:
   5:
-    - "[command] eco give {player} 500"
+    - "[console] eco give {player} 500"
   10:
-    - "[command] eco give {player} 2000"
-    - "[command] broadcast §5{player} §fpasse §5niveau 10 §fPilleur !"
+    - "[console] eco give {player} 2000"
+    - "[console] broadcast §5{player} §fpasse §5niveau 10 §fPilleur !"
   25:
-    - "[command] eco give {player} 10000"
+    - "[console] eco give {player} 10000"
   50:
-    - "[command] eco give {player} 50000"
-    - "[command] broadcast §5{player} §fa atteint le §5niveau MAXIMUM §fdu job Pilleur !"
+    - "[console] eco give {player} 50000"
+    - "[console] broadcast §5{player} §fa atteint le §5niveau MAXIMUM §fdu job Pilleur !"
 
 actions:
   TNT_EXPLODE:
@@ -55,8 +105,6 @@ actions:
     money: 0
     silktouch: false
 
-  # Les crafts Pilleur sont comptés par item réellement produit.
-  # Un shift-click de 16 TNT => 16 unités XP/quête/money.
   TNT_CRAFT:
     xp: 8
     money: 0
