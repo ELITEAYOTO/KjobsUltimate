@@ -1,0 +1,30 @@
+# ============================================================
+# KjobsUltimate V3.13 — bloc à FUSIONNER dans config.yml
+# ============================================================
+#
+# Ne crée pas un deuxième "anti_abuse:".
+# Copie uniquement "harvest:" sous ton anti_abuse existant.
+
+anti_abuse:
+  harvest:
+
+    # Protection très courte contre les plugins qui émettent un second
+    # BlockBreakEvent pour le bloc supérieur déjà compté.
+    cascade_guard_ticks: 3
+
+    vertical_crops:
+
+      SUGAR_CANE_BLOCK:
+        enabled: true
+
+        # Maximum crédité en une seule action utilisateur.
+        max_units_per_break: 16
+
+        # Maximum inspecté vers le haut.
+        # Peut être supérieur au nombre crédité pour supprimer les doubles events.
+        max_scan: 16
+
+      CACTUS:
+        enabled: true
+        max_units_per_break: 16
+        max_scan: 16
