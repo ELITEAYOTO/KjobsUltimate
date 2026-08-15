@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import org.bukkit.plugin.java.JavaPlugin;
 
+import me.krunsh.kjobultimate.action.JobActionService;
 import me.krunsh.kjobultimate.config.ConfigManager;
 import me.krunsh.kjobultimate.data.DatabaseManager;
 import me.krunsh.kjobultimate.data.PlayerDataManager;
@@ -22,12 +23,11 @@ import me.krunsh.kjobultimate.view.QuestViewService;
 /**
  * Point d'entrée de KjobsUltimate.
  *
- * V3.11 :
- * - Kgui V2 est l'unique moteur GUI ;
- * - le TAB a été retiré de KjobsUltimate et sera géré par Ktab ;
- * - HUD reste temporairement dans KjobsUltimate ;
- * - JobsViewService / QuestViewService restent les snapshots officiels
- *   consommés par Kgui et PlaceholderAPI.
+ * V3.13 :
+ * - Kgui V2 reste l'unique moteur GUI ;
+ * - Ktab reste totalement séparé ;
+ * - JobActionService centralise l'accounting XP / money / HUD / quêtes ;
+ * - les listeners conservent uniquement la détection métier spécifique.
  */
 public final class KjobUltimate extends JavaPlugin {
 
@@ -42,6 +42,7 @@ public final class KjobUltimate extends JavaPlugin {
 
     private XpManager xpManager;
     private SlotManager slotManager;
+    private JobActionService jobActionService;
 
     private JobsViewService jobsViewService;
     private QuestViewService questViewService;
@@ -89,6 +90,9 @@ public final class KjobUltimate extends JavaPlugin {
 
             slotManager =
                 new SlotManager(this);
+
+            jobActionService =
+                new JobActionService(this);
 
             KjobLogger.success(
                 "Configs chargées — "
@@ -338,6 +342,10 @@ public final class KjobUltimate extends JavaPlugin {
 
     public SlotManager getSlotManager() {
         return slotManager;
+    }
+
+    public JobActionService getJobActionService() {
+        return jobActionService;
     }
 
     public JobsViewService getJobsViewService() {

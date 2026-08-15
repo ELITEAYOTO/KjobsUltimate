@@ -13,15 +13,10 @@ import java.util.Map;
 /**
  * Définition immuable d'un métier chargé depuis jobs/<jobId>.yml.
  *
- * Convention de niveaux :
- * - le joueur commence au niveau 0 ;
- * - custom_levels.1 représente l'XP nécessaire pour atteindre le niveau 1 ;
- * - custom_levels.2 représente l'XP nécessaire pour passer du niveau 1 au niveau 2 ;
- * - custom_levels.N représente l'XP nécessaire pour atteindre le niveau N.
- *
- * Cette convention est exposée par :
- * - getXpRequiredToReachLevel(targetLevel) ;
- * - getXpRequiredForNextLevel(currentLevel).
+ * V3.13 :
+ * - une action de craft peut choisir son mode de comptage ;
+ * - les crafts Kcraft peuvent être ciblés exactement via "KCRAFT:<craftId>" ;
+ * - les crafts forcés sont refusés par défaut.
  */
 public final class JobDefinition {
 
@@ -31,22 +26,23 @@ public final class JobDefinition {
     private final JobIcon icon;
     private final int dailyXpCap;
 
-    /**
-     * Niveau cible -> XP nécessaire pour atteindre ce niveau.
-     *
-     * Exemple :
-     * 1 -> XP nécessaire pour passer de 0 à 1
-     * 2 -> XP nécessaire pour passer de 1 à 2
-     */
     private final Map<Integer, Integer> xpTable;
 
-    /** Clé d'action normalisée -> récompense associée. */
+    /**
+     * Actions standards (Material, MATERIAL:data, actions spéciales).
+     * Cette map reste celle exposée à ConfigValidator pour préserver son
+     * contrat actuel.
+     */
     private final Map<String, ActionReward> actions;
 
-    /** Niveau atteint -> commandes de récompense à exécuter. */
+    /**
+     * Actions Kcraft exactes, volontairement séparées des actions Bukkit.
+     * Elles sont validées pendant le parsing de JobDefinition.
+     */
+    private final Map<String, ActionReward> kcraftActions;
+
     private final Map<Integer, List<String>> levelRewards;
 
-    // Courbe utilisée lorsqu'un niveau n'est pas présent dans custom_levels.
     private final String fallbackType;
     private final int fallbackBase;
     private final double fallbackMultiplier;
@@ -59,6 +55,7 @@ public final class JobDefinition {
             int dailyXpCap,
             Map<Integer, Integer> xpTable,
             Map<String, ActionReward> actions,
+            Map<String, ActionReward> kcraftActions,
             Map<Integer, List<String>> levelRewards,
             String fallbackType,
             int fallbackBase,
@@ -76,6 +73,9 @@ public final class JobDefinition {
         this.actions = Collections.unmodifiableMap(
             new LinkedHashMap<String, ActionReward>(actions));
 
+        this.kcraftActions = Collections.unmodifiableMap(
+            new LinkedHashMap<String, ActionReward>(kcraftActions));
+
         LinkedHashMap<Integer, List<String>> immutableRewards =
             new LinkedHashMap<Integer, List<String>>();
 
@@ -92,9 +92,6 @@ public final class JobDefinition {
         this.fallbackMultiplier = fallbackMultiplier;
     }
 
-    /**
-     * Construit une définition de métier depuis un fichier YAML.
-     */
     public static JobDefinition fromConfig(String jobId, FileConfiguration cfg) {
         if (jobId == null || jobId.trim().isEmpty()) {
             throw new IllegalArgumentException("jobId ne peut pas être vide.");
@@ -129,12 +126,15 @@ public final class JobDefinition {
                     int requiredXp = customLevels.getInt(rawLevel);
                     xpTable.put(targetLevel, requiredXp);
                 } catch (NumberFormatException ignored) {
-                    // ConfigValidator signalera la clé invalide lors de la validation.
+                    // ConfigValidator signalera la clé invalide.
                 }
             }
         }
 
         Map<String, ActionReward> actions =
+            new LinkedHashMap<String, ActionReward>();
+
+        Map<String, ActionReward> kcraftActions =
             new LinkedHashMap<String, ActionReward>();
 
         ConfigurationSection actionSection =
@@ -147,16 +147,63 @@ public final class JobDefinition {
                     continue;
                 }
 
-                int xp = actionSection.getInt(rawActionKey + ".xp", 0);
+                int xp =
+                    actionSection.getInt(
+                        rawActionKey + ".xp",
+                        0
+                    );
+
                 double money =
-                    actionSection.getDouble(rawActionKey + ".money", 0D);
+                    actionSection.getDouble(
+                        rawActionKey + ".money",
+                        0D
+                    );
+
                 boolean silkTouchBlocked =
                     actionSection.getBoolean(
-                        rawActionKey + ".silktouch", false);
+                        rawActionKey + ".silktouch",
+                        false
+                    );
 
-                actions.put(
-                    actionKey,
-                    new ActionReward(xp, money, silkTouchBlocked));
+                CountMode countMode =
+                    CountMode.fromConfig(
+                        actionSection.getString(
+                            rawActionKey + ".count_mode",
+                            "CRAFTS"
+                        )
+                    );
+
+                boolean allowForced =
+                    actionSection.getBoolean(
+                        rawActionKey + ".allow_forced",
+                        false
+                    );
+
+                ActionReward reward =
+                    new ActionReward(
+                        xp,
+                        money,
+                        silkTouchBlocked,
+                        countMode,
+                        allowForced
+                    );
+
+                if (isKcraftActionKey(actionKey)) {
+                    validateKcraftAction(
+                        normalizedJobId,
+                        actionKey,
+                        reward
+                    );
+                    kcraftActions.put(
+                        actionKey,
+                        reward
+                    );
+                } else {
+                    actions.put(
+                        actionKey,
+                        reward
+                    );
+                }
             }
         }
 
@@ -192,18 +239,52 @@ public final class JobDefinition {
             dailyXpCap,
             xpTable,
             actions,
+            kcraftActions,
             levelRewards,
             fallbackType,
             fallbackBase,
             fallbackMultiplier);
     }
 
-    /**
-     * Retourne l'XP nécessaire pour atteindre un niveau cible précis.
-     *
-     * @param targetLevel niveau à atteindre, compris entre 1 et maxLevel
-     * @return XP nécessaire, ou 0 si le niveau demandé est hors limites
-     */
+    private static void validateKcraftAction(
+            String jobId,
+            String actionKey,
+            ActionReward reward) {
+
+        if ("KCRAFT:".equals(actionKey)
+                || actionKey.length() <= "KCRAFT:".length()) {
+
+            throw new IllegalArgumentException(
+                "Action Kcraft invalide dans "
+                    + jobId
+                    + " : un craftId est obligatoire après KCRAFT:."
+            );
+        }
+
+        if (reward.getXp() <= 0) {
+            throw new IllegalArgumentException(
+                "Action "
+                    + actionKey
+                    + " dans "
+                    + jobId
+                    + " : xp doit être > 0."
+            );
+        }
+
+        if (Double.isNaN(reward.getMoney())
+                || Double.isInfinite(reward.getMoney())
+                || reward.getMoney() < 0D) {
+
+            throw new IllegalArgumentException(
+                "Action "
+                    + actionKey
+                    + " dans "
+                    + jobId
+                    + " : money doit être un nombre fini >= 0."
+            );
+        }
+    }
+
     public int getXpRequiredToReachLevel(int targetLevel) {
         if (targetLevel < 1 || targetLevel > maxLevel) {
             return 0;
@@ -217,15 +298,6 @@ public final class JobDefinition {
         return calculateFallbackXp(targetLevel);
     }
 
-    /**
-     * Retourne l'XP nécessaire pour passer du niveau actuel au suivant.
-     *
-     * Exemples :
-     * currentLevel=0 -> lit custom_levels.1
-     * currentLevel=1 -> lit custom_levels.2
-     * currentLevel=49 -> lit custom_levels.50
-     * currentLevel=50 -> retourne 0 si maxLevel=50
-     */
     public int getXpRequiredForNextLevel(int currentLevel) {
         if (currentLevel < 0 || currentLevel >= maxLevel) {
             return 0;
@@ -260,14 +332,19 @@ public final class JobDefinition {
     }
 
     /**
-     * Retourne la récompense associée à une action.
-     *
-     * Les clés Bukkit et les clés MATERIAL:data sont acceptées :
-     * STONE, STONE:3, PRISMARINE:2, PVP_KILL, etc.
+     * Cherche une action standard ou une action Kcraft exacte.
      */
     public ActionReward getAction(String actionKey) {
         String normalized = normalizeActionKey(actionKey);
-        return normalized.isEmpty() ? null : actions.get(normalized);
+        if (normalized.isEmpty()) {
+            return null;
+        }
+
+        if (isKcraftActionKey(normalized)) {
+            return kcraftActions.get(normalized);
+        }
+
+        return actions.get(normalized);
     }
 
     public boolean hasAction(String actionKey) {
@@ -283,6 +360,13 @@ public final class JobDefinition {
 
     public boolean isMaxLevel(int level) {
         return level >= maxLevel;
+    }
+
+    private static boolean isKcraftActionKey(
+            String actionKey) {
+
+        return actionKey != null
+            && actionKey.startsWith("KCRAFT:");
     }
 
     private static String normalizeActionKey(String value) {
@@ -305,8 +389,6 @@ public final class JobDefinition {
             : "linear";
     }
 
-    // Accesseurs
-
     public String getId() {
         return id;
     }
@@ -323,9 +405,6 @@ public final class JobDefinition {
         return icon;
     }
 
-    /**
-     * 0 signifie qu'aucun plafond propre au métier n'est activé.
-     */
     public int getDailyXpCap() {
         return dailyXpCap;
     }
@@ -334,17 +413,22 @@ public final class JobDefinition {
         return xpTable;
     }
 
+    /**
+     * Actions standard uniquement.
+     * ConfigValidator continue volontairement de valider cette map.
+     */
     public Map<String, ActionReward> getActions() {
         return actions;
+    }
+
+    public Map<String, ActionReward> getKcraftActions() {
+        return kcraftActions;
     }
 
     public Map<Integer, List<String>> getLevelRewards() {
         return levelRewards;
     }
 
-    /**
-     * Apparence centrale d'un métier, réutilisée dans les interfaces.
-     */
     public static final class JobIcon {
 
         private final String material;
@@ -390,23 +474,96 @@ public final class JobDefinition {
         }
     }
 
-    /**
-     * Récompense immuable d'une action de métier.
-     */
+    public enum CountMode {
+
+        /**
+         * 1 unité = 1 exécution de la recette.
+         * Mode par défaut, rétrocompatible avec l'XP Artisan historique.
+         */
+        CRAFTS,
+
+        /**
+         * 1 unité = 1 item réellement produit.
+         * Ex.: une recette donnant 4 flèches vaut 4 unités.
+         */
+        RESULT_ITEMS;
+
+        public static CountMode fromConfig(
+                String raw) {
+
+            if (raw == null
+                    || raw.trim().isEmpty()) {
+
+                return CRAFTS;
+            }
+
+            String normalized =
+                raw.trim()
+                    .toUpperCase(Locale.ROOT)
+                    .replace('-', '_')
+                    .replace(' ', '_');
+
+            if ("CRAFTS".equals(normalized)
+                    || "CRAFT".equals(normalized)) {
+
+                return CRAFTS;
+            }
+
+            if ("RESULT_ITEMS".equals(normalized)
+                    || "ITEMS".equals(normalized)
+                    || "OUTPUT_ITEMS".equals(normalized)) {
+
+                return RESULT_ITEMS;
+            }
+
+            throw new IllegalArgumentException(
+                "count_mode inconnu : "
+                    + raw
+                    + " (CRAFTS ou RESULT_ITEMS attendu)."
+            );
+        }
+    }
+
     public static final class ActionReward {
 
         private final int xp;
         private final double money;
         private final boolean silkTouchBlocked;
+        private final CountMode countMode;
+        private final boolean allowForced;
 
+        /**
+         * Constructeur historique conservé pour compatibilité.
+         */
         public ActionReward(
                 int xp,
                 double money,
                 boolean silkTouchBlocked) {
 
+            this(
+                xp,
+                money,
+                silkTouchBlocked,
+                CountMode.CRAFTS,
+                false
+            );
+        }
+
+        public ActionReward(
+                int xp,
+                double money,
+                boolean silkTouchBlocked,
+                CountMode countMode,
+                boolean allowForced) {
+
             this.xp = xp;
             this.money = money;
             this.silkTouchBlocked = silkTouchBlocked;
+            this.countMode =
+                countMode == null
+                    ? CountMode.CRAFTS
+                    : countMode;
+            this.allowForced = allowForced;
         }
 
         public int getXp() {
@@ -419,6 +576,14 @@ public final class JobDefinition {
 
         public boolean isSilkTouchBlocked() {
             return silkTouchBlocked;
+        }
+
+        public CountMode getCountMode() {
+            return countMode;
+        }
+
+        public boolean isAllowForced() {
+            return allowForced;
         }
     }
 }

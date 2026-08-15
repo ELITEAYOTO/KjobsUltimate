@@ -2,49 +2,42 @@
 # KjobsUltimate — Job : Artisan
 # ============================================================
 #
-# GUIDE DE CONFIGURATION D'UN JOB
-# ─────────────────────────────────────────────────────────────
-# Voir jobs/mineur.yml pour la documentation complète de tous les champs.
-# Recharger à chaud : /kjobs reload
+# V3.13 — ACCOUNTING DES CRAFTS
 #
-# NOTES SPÉCIFIQUES À L'Artisan
-# ─────────────────────────────────────────────────────────────
-# CLÉ D'ACTION = Material du résultat du craft EN MAJUSCULES.
-#   Déclenché sur CraftItemEvent (craft vanilla Bukkit) via ArtisanListener.java.
-#   Déclenché AUSSI sur KcraftPostCraftEvent (Kcraft) via KcraftHook.java
-#   si le plugin Kcraft est installé (les deux listeners coexistent).
+# Actions vanilla :
+#   clé = Material du résultat (IRON_PICKAXE, ARROW, etc.)
 #
-# CRAFT VANILLA vs KCRAFT
-#   Craft vanilla    : table de craft standard 3x3, recettes Bukkit.
-#   Craft Kcraft     : recettes custom définies dans Kcraft (items CIT, forges...)
-#   Les deux sources d'XP fonctionnent indépendamment pour le même Material.
-#   Si un item est craftable vanilla ET via Kcraft, le joueur peut gagner XP des deux.
+# Actions Kcraft exactes :
+#   clé = "KCRAFT:<craftId>"
+#   IMPORTANT : garder les guillemets YAML autour de la clé.
 #
-# AMOUNT (craft par lot)
-#   En craft vanilla, CraftItemEvent est déclenché UNE FOIS par clic de craft,
-#   même si le joueur fait Shift+Click pour craft 64 items d'un coup.
-#   Conseillé : garder les XP par craft bas pour les items craftables en gros lots
-#   (STICK, WOOD, etc.) et plus élevés pour les items coûteux (armure diamant...).
+# Ordre Kcraft :
+#   1. "KCRAFT:<craftId>"
+#   2. fallback sur le Material du résultat
 #
-# SILK TOUCH
-#   silktouch n'a aucun effet sur l'Artisan. Garder silktouch: false.
+# count_mode:
+#   CRAFTS       = 1 unité par exécution de recette (défaut)
+#   RESULT_ITEMS = 1 unité par item produit
 #
-# ANTI-ABUSE Artisan (pas de cooldown bloc position, pas de cooldown PvP)
-#   L'anti-abuse principal est le coût des matières premières.
-#   Le daily_xp_cap est très recommandé pour l'Artisan :
-#     daily_xp_cap: 2000 = emptoyer le craft massif en boucle (STICK, WOOD...)
+# Exemple ARROW :
+#   recette x4, 3 exécutions
+#   CRAFTS       => 3 unités
+#   RESULT_ITEMS => 12 unités
 #
-# EXEMPLES DE MATIÈRES CRAFTABLES (Bukkit 1.8.8)
-#   Bois/bases   : WOOD (planches), STICK, CHEST, WORKBENCH, FURNACE
-#   Armes fer    : IRON_SWORD, IRON_AXE
-#   Outils fer   : IRON_PICKAXE, IRON_SPADE, IRON_HOE, SHEARS
-#   Armure fer   : IRON_HELMET, IRON_CHESTPLATE, IRON_LEGGINGS, IRON_BOOTS
-#   Armes dia.   : DIAMOND_SWORD, DIAMOND_AXE
-#   Outils dia.  : DIAMOND_PICKAXE, DIAMOND_SHOVEL, DIAMOND_HOE
-#   Armure dia.  : DIAMOND_HELMET, DIAMOND_CHESTPLATE, DIAMOND_LEGGINGS, DIAMOND_BOOTS
-#   Blocs utiles : STONE_PLATE, DISPENSER, NOTE_BLOCK, PISTON_BASE, ENCHANTMENT_TABLE
-#   Redstone     : REDSTONE_TORCH_ON, LEVER, TRIPWIRE_HOOK, PISTON_STICKY_BASE
-#   Aliments     : BREAD, CAKE, COOKIE, PUMPKIN_PIE, MUSHROOM_SOUP
+# allow_forced:
+#   false = un craft Kcraft forcé/admin ne donne rien (défaut)
+#   true  = autorise explicitement les crafts forcés
+#
+# Exemple exact Kcraft à copier si besoin :
+#
+#   "KCRAFT:pioche_azurite":
+#     xp: 120
+#     money: 10
+#     silktouch: false
+#     count_mode: CRAFTS
+#     allow_forced: false
+#
+# XP, money, HUD et quêtes utilisent toujours la MÊME quantité.
 
 display_name: "§eArtisan"
 description: "§7Maîtrise la fabrication et produit des objets de qualité."
@@ -83,23 +76,6 @@ level_rewards:
     - "eco give {player} 25000"
     - "broadcast §e{player} §fa atteint le §eniveau MAXIMUM §fdu job Artisan !"
 
-# ─────────────────────────────────────────────────────────────
-# ACTIONS DE L'Artisan : items à crafter pour gagner XP + argent
-# ─────────────────────────────────────────────────────────────
-# Déclenché par CraftItemEvent (vanilla) + KcraftPostCraftEvent (Kcraft).
-# Clé = Material du résultat du craft EN MAJUSCULES.
-#
-# xp    : XP brut accordé par craft (avant multiplicateurs).
-# money : argent versé via Vault par craft. 0 = pas d'écono.
-# silktouch: false pour tous (sans effet sur le craft).
-#
-# Conseils d'équilibrage :
-#   - Items économiques (STICK, WOOD)       : xp 1–2  (craftables en masse)
-#   - Items intermédiaires (CHEST, FURNACE) : xp 5–10
-#   - Outils/armes fer                       : xp 15–30
-#   - Armure complète / outils diamant       : xp 50–100
-#
-# Utiliser daily_xp_cap pour éviter l'abus de craft massif (STICK, planches...).
 actions:
   WOOD:
     xp: 1

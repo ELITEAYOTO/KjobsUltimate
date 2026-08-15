@@ -11,9 +11,10 @@ import me.krunsh.kjobultimate.util.KjobLogger;
 /**
  * Charge et expose les fichiers de configuration YAML de KjobsUltimate.
  *
- * V3.11 :
+ * V3.13 :
  * - tab.yml n'appartient plus à KjobsUltimate ;
- * - le TAB sera configuré dans le plugin Ktab séparé.
+ * - les paramètres de récolte verticale disposent de valeurs sûres même si
+ *   l'ancien config.yml ne contient pas encore les nouvelles clés.
  */
 public final class ConfigManager {
 
@@ -157,6 +158,93 @@ public final class ConfigManager {
         );
     }
 
+    /**
+     * Durée pendant laquelle un BlockBreakEvent secondaire produit par un
+     * plugin de récolte est ignoré après qu'il a déjà été compté dans une
+     * cascade de canne à sucre / cactus.
+     */
+    public int getHarvestCascadeGuardTicks() {
+        return clamp(
+            mainConfig.getInt(
+                "anti_abuse.harvest.cascade_guard_ticks",
+                3
+            ),
+            0,
+            20
+        );
+    }
+
+    public boolean isVerticalHarvestEnabled(
+            String materialName) {
+
+        String material =
+            normalizeMaterial(materialName);
+
+        if (material.isEmpty()) {
+            return false;
+        }
+
+        return mainConfig.getBoolean(
+            "anti_abuse.harvest.vertical_crops."
+                + material
+                + ".enabled",
+            true
+        );
+    }
+
+    /**
+     * Nombre maximal de blocs crédités pour une seule action utilisateur.
+     */
+    public int getVerticalHarvestMaxUnits(
+            String materialName) {
+
+        String material =
+            normalizeMaterial(materialName);
+
+        return clamp(
+            mainConfig.getInt(
+                "anti_abuse.harvest.vertical_crops."
+                    + material
+                    + ".max_units_per_break",
+                16
+            ),
+            1,
+            64
+        );
+    }
+
+    /**
+     * Nombre maximal de blocs consécutifs inspectés (bloc cassé inclus).
+     * Le scan peut être supérieur au nombre crédité afin de marquer les
+     * événements secondaires comme déjà comptés.
+     */
+    public int getVerticalHarvestMaxScan(
+            String materialName) {
+
+        String material =
+            normalizeMaterial(materialName);
+
+        int maxUnits =
+            getVerticalHarvestMaxUnits(material);
+
+        int configured =
+            clamp(
+                mainConfig.getInt(
+                    "anti_abuse.harvest.vertical_crops."
+                        + material
+                        + ".max_scan",
+                    16
+                ),
+                1,
+                64
+            );
+
+        return Math.max(
+            maxUnits,
+            configured
+        );
+    }
+
     public int getPvpTargetCooldown() {
 
         if (mainConfig.contains(
@@ -260,5 +348,31 @@ public final class ConfigManager {
                 "&",
                 "\u00A7"
             );
+    }
+
+    private static String normalizeMaterial(
+            String materialName) {
+
+        if (materialName == null) {
+            return "";
+        }
+
+        return materialName
+            .trim()
+            .toUpperCase();
+    }
+
+    private static int clamp(
+            int value,
+            int minimum,
+            int maximum) {
+
+        return Math.max(
+            minimum,
+            Math.min(
+                maximum,
+                value
+            )
+        );
     }
 }

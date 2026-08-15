@@ -1,0 +1,31 @@
+# ============================================================
+# Exemple à FUSIONNER dans jobs/artisan.yml -> actions:
+# ============================================================
+
+actions:
+
+  # Une recette Kcraft précise.
+  "KCRAFT:pioche_azurite":
+    xp: 120
+    money: 10
+    silktouch: false
+    count_mode: CRAFTS
+    allow_forced: false
+
+  # Exemple : recette produisant plusieurs unités.
+  "KCRAFT:fleche_volkarite":
+    xp: 2
+    money: 0
+    silktouch: false
+    count_mode: RESULT_ITEMS
+    allow_forced: false
+
+# V3.13 :
+# - le craftId choisit la récompense Artisan exacte ;
+# - la progression de quête reste un UNIQUE signal CRAFT ciblé sur le
+#   Material du résultat.
+#
+# Ce choix est volontaire : appeler CRAFT puis un second type KCRAFT pour la
+# même action pourrait faire avancer deux étapes successives d'une même chaîne
+# dans QuestManager. Le support de quêtes ciblées par craftId devra donc passer
+# par une API batch/alias dédiée, pas par deux appels progress() successifs.
