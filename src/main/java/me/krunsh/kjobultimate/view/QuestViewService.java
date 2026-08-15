@@ -2,9 +2,13 @@ package me.krunsh.kjobultimate.view;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import org.bukkit.entity.Player;
 
@@ -17,20 +21,24 @@ import me.krunsh.kjobultimate.quests.QuestDefinition;
 import me.krunsh.kjobultimate.quests.QuestManager;
 
 /**
- * Source unique de construction des vues Quêtes V3.
+ * Source unique des snapshots Quêtes V3.
  *
- * Règles :
- * - aucune lecture SQL ;
- * - aucune écriture dans PlayerData ;
- * - aucun cache dans cette première version ;
- * - l'état officiel d'une quête vient de QuestManager / QuestChainPolicy ;
- * - les informations de job consommées ici viennent de JobsViewService.
- *
- * Cette couche sera utilisée par PlaceholderAPI puis par Kgui.
+ * V3.9 :
+ * - toutes les quêtes et chaînes d'un joueur sont construites une seule fois
+ *   par snapshot ;
+ * - les appels PAPI/Kgui successifs réutilisent ce snapshot ;
+ * - invalidation immédiate via PlayerData.viewRevision ;
+ * - TTL de sécurité pour les reloads de catalogue/config ;
+ * - aucune lecture SQL.
  */
 public final class QuestViewService {
 
+    private static final long CACHE_TTL_MS = 1000L;
+
     private final KjobUltimate plugin;
+
+    private final ConcurrentMap<UUID, CacheEntry> cache =
+        new ConcurrentHashMap<UUID, CacheEntry>();
 
     public QuestViewService(KjobUltimate plugin) {
         if (plugin == null) {
@@ -46,34 +54,18 @@ public final class QuestViewService {
             UUID playerId,
             String questId) {
 
-        if (playerId == null
-                || questId == null
-                || plugin.getPlayerDataManager() == null
-                || plugin.getQuestManager() == null) {
-
+        if (questId == null) {
             return null;
         }
 
-        PlayerData data =
-                plugin.getPlayerDataManager()
-                    .get(playerId);
+        PlayerQuestSnapshot snapshot =
+            getSnapshot(playerId);
 
-        QuestDefinition quest =
-                plugin.getQuestManager()
-                    .getQuest(questId);
-
-        if (data == null || quest == null) {
-            return null;
-        }
-
-        PlayerJobsView jobsView =
-                getJobsView(playerId);
-
-        return buildQuestView(
-            data,
-            quest,
-            jobsView
-        );
+        return snapshot == null
+            ? null
+            : snapshot.questsById.get(
+                normalize(questId)
+            );
     }
 
     public QuestView getQuest(
@@ -92,34 +84,18 @@ public final class QuestViewService {
             UUID playerId,
             String chainId) {
 
-        if (playerId == null
-                || chainId == null
-                || plugin.getPlayerDataManager() == null
-                || plugin.getQuestManager() == null) {
-
+        if (chainId == null) {
             return null;
         }
 
-        PlayerData data =
-                plugin.getPlayerDataManager()
-                    .get(playerId);
+        PlayerQuestSnapshot snapshot =
+            getSnapshot(playerId);
 
-        QuestChainDefinition chain =
-                plugin.getQuestManager()
-                    .getChain(chainId);
-
-        if (data == null || chain == null) {
-            return null;
-        }
-
-        PlayerJobsView jobsView =
-                getJobsView(playerId);
-
-        return buildChainView(
-            data,
-            chain,
-            jobsView
-        );
+        return snapshot == null
+            ? null
+            : snapshot.chainsById.get(
+                normalize(chainId)
+            );
     }
 
     public QuestChainView getChain(
@@ -137,42 +113,12 @@ public final class QuestViewService {
     public List<QuestView> getQuests(
             UUID playerId) {
 
-        if (playerId == null
-                || plugin.getPlayerDataManager() == null
-                || plugin.getQuestManager() == null) {
+        PlayerQuestSnapshot snapshot =
+            getSnapshot(playerId);
 
-            return Collections.emptyList();
-        }
-
-        PlayerData data =
-                plugin.getPlayerDataManager()
-                    .get(playerId);
-
-        if (data == null) {
-            return Collections.emptyList();
-        }
-
-        PlayerJobsView jobsView =
-                getJobsView(playerId);
-
-        List<QuestView> result =
-                new ArrayList<QuestView>();
-
-        for (QuestDefinition quest
-                : plugin.getQuestManager().getQuests()) {
-
-            if (quest != null) {
-                result.add(
-                    buildQuestView(
-                        data,
-                        quest,
-                        jobsView
-                    )
-                );
-            }
-        }
-
-        return Collections.unmodifiableList(result);
+        return snapshot == null
+            ? Collections.<QuestView>emptyList()
+            : snapshot.quests;
     }
 
     public List<QuestView> getQuests(
@@ -180,7 +126,9 @@ public final class QuestViewService {
 
         return player == null
             ? Collections.<QuestView>emptyList()
-            : getQuests(player.getUniqueId());
+            : getQuests(
+                player.getUniqueId()
+            );
     }
 
     public List<QuestView> getQuestsForJob(
@@ -188,87 +136,46 @@ public final class QuestViewService {
             String rawJobId) {
 
         String jobId =
-                normalize(rawJobId);
+            normalize(rawJobId);
 
-        if (jobId.isEmpty()
-                || playerId == null
-                || plugin.getPlayerDataManager() == null
-                || plugin.getQuestManager() == null) {
-
+        if (jobId.isEmpty()) {
             return Collections.emptyList();
         }
 
-        PlayerData data =
-                plugin.getPlayerDataManager()
-                    .get(playerId);
+        PlayerQuestSnapshot snapshot =
+            getSnapshot(playerId);
 
-        if (data == null) {
+        if (snapshot == null) {
             return Collections.emptyList();
         }
-
-        PlayerJobsView jobsView =
-                getJobsView(playerId);
 
         List<QuestView> result =
-                new ArrayList<QuestView>();
+            new ArrayList<QuestView>();
 
-        for (QuestDefinition quest
-                : plugin.getQuestManager()
-                    .getQuestsForJob(jobId)) {
+        for (QuestView quest : snapshot.quests) {
+            if (quest != null
+                    && jobId.equals(
+                        normalize(quest.getJobId())
+                    )) {
 
-            if (quest != null) {
-                result.add(
-                    buildQuestView(
-                        data,
-                        quest,
-                        jobsView
-                    )
-                );
+                result.add(quest);
             }
         }
 
-        return Collections.unmodifiableList(result);
+        return Collections.unmodifiableList(
+            result
+        );
     }
 
     public List<QuestChainView> getChains(
             UUID playerId) {
 
-        if (playerId == null
-                || plugin.getPlayerDataManager() == null
-                || plugin.getQuestManager() == null) {
+        PlayerQuestSnapshot snapshot =
+            getSnapshot(playerId);
 
-            return Collections.emptyList();
-        }
-
-        PlayerData data =
-                plugin.getPlayerDataManager()
-                    .get(playerId);
-
-        if (data == null) {
-            return Collections.emptyList();
-        }
-
-        PlayerJobsView jobsView =
-                getJobsView(playerId);
-
-        List<QuestChainView> result =
-                new ArrayList<QuestChainView>();
-
-        for (QuestChainDefinition chain
-                : plugin.getQuestManager().getChains()) {
-
-            if (chain != null) {
-                result.add(
-                    buildChainView(
-                        data,
-                        chain,
-                        jobsView
-                    )
-                );
-            }
-        }
-
-        return Collections.unmodifiableList(result);
+        return snapshot == null
+            ? Collections.<QuestChainView>emptyList()
+            : snapshot.chains;
     }
 
     public List<QuestChainView> getChains(
@@ -276,26 +183,25 @@ public final class QuestViewService {
 
         return player == null
             ? Collections.<QuestChainView>emptyList()
-            : getChains(player.getUniqueId());
+            : getChains(
+                player.getUniqueId()
+            );
     }
 
     public int getClaimableQuestCount(
             UUID playerId) {
 
-        int count = 0;
+        PlayerQuestSnapshot snapshot =
+            getSnapshot(playerId);
 
-        for (QuestView quest : getQuests(playerId)) {
-            if (quest != null && quest.isClaimable()) {
-                count++;
-            }
-        }
-
-        return count;
+        return snapshot == null
+            ? 0
+            : snapshot.claimableQuestCount;
     }
 
     public int getQuestCount() {
         QuestManager manager =
-                plugin.getQuestManager();
+            plugin.getQuestManager();
 
         return manager == null
             ? 0
@@ -304,20 +210,177 @@ public final class QuestViewService {
 
     public int getChainCount() {
         QuestManager manager =
-                plugin.getQuestManager();
+            plugin.getQuestManager();
 
         return manager == null
             ? 0
             : manager.getChains().size();
     }
 
+    public void invalidate(UUID playerId) {
+        if (playerId != null) {
+            cache.remove(playerId);
+        }
+    }
+
+    public void clearCache() {
+        cache.clear();
+    }
+
+    public int getCachedPlayerCount() {
+        return cache.size();
+    }
+
+    private PlayerQuestSnapshot getSnapshot(
+            UUID playerId) {
+
+        if (playerId == null
+                || plugin.getPlayerDataManager() == null
+                || plugin.getQuestManager() == null) {
+
+            return null;
+        }
+
+        PlayerData data =
+            plugin.getPlayerDataManager()
+                .get(playerId);
+
+        if (data == null) {
+            cache.remove(playerId);
+            return null;
+        }
+
+        long revision =
+            data.getViewRevision();
+
+        long now =
+            System.currentTimeMillis();
+
+        CacheEntry cached =
+            cache.get(playerId);
+
+        if (cached != null
+                && cached.revision == revision
+                && now - cached.createdAt <= CACHE_TTL_MS) {
+
+            return cached.snapshot;
+        }
+
+        PlayerQuestSnapshot rebuilt =
+            buildSnapshot(
+                playerId,
+                data
+            );
+
+        cache.put(
+            playerId,
+            new CacheEntry(
+                revision,
+                now,
+                rebuilt
+            )
+        );
+
+        return rebuilt;
+    }
+
+    private PlayerQuestSnapshot buildSnapshot(
+            UUID playerId,
+            PlayerData data) {
+
+        PlayerJobsView jobsView =
+            getJobsView(playerId);
+
+        List<QuestView> quests =
+            new ArrayList<QuestView>();
+
+        Map<String, QuestView> questsById =
+            new LinkedHashMap<String, QuestView>();
+
+        int claimableQuestCount = 0;
+
+        for (QuestDefinition quest
+                : plugin.getQuestManager()
+                    .getQuests()) {
+
+            if (quest == null) {
+                continue;
+            }
+
+            QuestView view =
+                buildQuestView(
+                    data,
+                    quest,
+                    jobsView
+                );
+
+            quests.add(view);
+
+            questsById.put(
+                normalize(view.getId()),
+                view
+            );
+
+            if (view.isClaimable()) {
+                claimableQuestCount++;
+            }
+        }
+
+        List<QuestChainView> chains =
+            new ArrayList<QuestChainView>();
+
+        Map<String, QuestChainView> chainsById =
+            new LinkedHashMap<String, QuestChainView>();
+
+        for (QuestChainDefinition chain
+                : plugin.getQuestManager()
+                    .getChains()) {
+
+            if (chain == null) {
+                continue;
+            }
+
+            QuestChainView view =
+                buildChainView(
+                    data,
+                    chain,
+                    jobsView,
+                    questsById
+                );
+
+            chains.add(view);
+
+            chainsById.put(
+                normalize(view.getId()),
+                view
+            );
+        }
+
+        return new PlayerQuestSnapshot(
+            Collections.unmodifiableList(
+                quests
+            ),
+            Collections.unmodifiableMap(
+                questsById
+            ),
+            Collections.unmodifiableList(
+                chains
+            ),
+            Collections.unmodifiableMap(
+                chainsById
+            ),
+            claimableQuestCount
+        );
+    }
+
     private QuestChainView buildChainView(
             PlayerData data,
             QuestChainDefinition chain,
-            PlayerJobsView jobsView) {
+            PlayerJobsView jobsView,
+            Map<String, QuestView> questsById) {
 
         List<QuestView> stages =
-                new ArrayList<QuestView>();
+            new ArrayList<QuestView>();
 
         int completedStages = 0;
         int claimedStages = 0;
@@ -330,11 +393,18 @@ public final class QuestViewService {
                 : chain.getStages()) {
 
             QuestView view =
+                questsById.get(
+                    normalize(stage.getId())
+                );
+
+            if (view == null) {
+                view =
                     buildQuestView(
                         data,
                         stage,
                         jobsView
                     );
+            }
 
             stages.add(view);
 
@@ -350,54 +420,61 @@ public final class QuestViewService {
                 claimableStages++;
             }
 
-            totalProgress += Math.min(
-                view.getProgress(),
-                view.getAmount()
-            );
+            totalProgress +=
+                Math.min(
+                    view.getProgress(),
+                    view.getAmount()
+                );
 
-            totalAmount += view.getAmount();
+            totalAmount +=
+                view.getAmount();
         }
 
         QuestDefinition activeDefinition =
-                plugin.getQuestManager()
-                    .getActiveQuest(
-                        data,
-                        chain.getId()
-                    );
+            plugin.getQuestManager()
+                .getActiveQuest(
+                    data,
+                    chain.getId()
+                );
 
         QuestView activeQuest =
-                activeDefinition == null
-                    ? null
-                    : findQuestView(
-                        stages,
+            activeDefinition == null
+                ? null
+                : questsById.get(
+                    normalize(
                         activeDefinition.getId()
-                    );
+                    )
+                );
 
         JobView job =
-                jobsView == null
-                    ? null
-                    : jobsView.getJob(
-                        chain.getJobId()
-                    );
+            jobsView == null
+                ? null
+                : jobsView.getJob(
+                    chain.getJobId()
+                );
 
         boolean jobActive =
-                job != null
-                    && job.isActive();
+            job != null
+                && job.isActive();
 
         String state;
 
         if (activeQuest != null) {
             state = activeQuest.getState();
+
         } else if (!stages.isEmpty()
                 && claimedStages >= stages.size()) {
 
             state = QuestChainPolicy.CLAIMED;
+
         } else if (!stages.isEmpty()
                 && completedStages >= stages.size()) {
 
             state = QuestChainPolicy.CLAIMABLE;
+
         } else if (!jobActive) {
             state = QuestChainPolicy.PAUSED_JOB;
+
         } else {
             state = QuestChainPolicy.LOCKED_CHAIN;
         }
@@ -426,92 +503,96 @@ public final class QuestViewService {
             PlayerJobsView jobsView) {
 
         QuestData questData =
-                data.getQuestProgress()
-                    .get(quest.getId());
+            data.getQuestProgress()
+                .get(quest.getId());
 
         int progress =
-                questData == null
-                    ? 0
-                    : Math.max(
-                        0,
-                        questData.getProgress()
-                    );
+            questData == null
+                ? 0
+                : Math.max(
+                    0,
+                    questData.getProgress()
+                );
 
         int amount =
-                Math.max(
-                    1,
-                    quest.getAmount()
-                );
+            Math.max(
+                1,
+                quest.getAmount()
+            );
 
         int remaining =
-                Math.max(
-                    0,
-                    amount - progress
-                );
+            Math.max(
+                0,
+                amount - progress
+            );
 
         int percent =
-                calculatePercent(
-                    progress,
-                    amount
-                );
+            calculatePercent(
+                progress,
+                amount
+            );
 
         boolean completed =
-                questData != null
-                    && questData.isCompleted();
+            questData != null
+                && questData.isCompleted();
 
         boolean claimed =
-                questData != null
-                    && questData.isClaimed();
+            questData != null
+                && questData.isClaimed();
 
         long completedAt =
-                questData == null
-                    ? 0L
-                    : Math.max(
-                        0L,
-                        questData.getCompletedAt()
-                    );
+            questData == null
+                ? 0L
+                : Math.max(
+                    0L,
+                    questData.getCompletedAt()
+                );
 
         String state =
-                plugin.getQuestManager()
-                    .getQuestState(
-                        data,
-                        quest
-                    );
+            plugin.getQuestManager()
+                .getQuestState(
+                    data,
+                    quest
+                );
 
         JobView job =
-                jobsView == null
-                    ? null
-                    : jobsView.getJob(
-                        quest.getJobId()
-                    );
+            jobsView == null
+                ? null
+                : jobsView.getJob(
+                    quest.getJobId()
+                );
 
         boolean jobActive =
-                job != null
-                    && job.isActive();
+            job != null
+                && job.isActive();
 
         QuestChainDefinition chain =
-                plugin.getQuestManager()
-                    .getChain(
-                        quest.getChainId()
-                    );
+            plugin.getQuestManager()
+                .getChain(
+                    quest.getChainId()
+                );
 
         int stageTotal =
-                chain == null
-                    ? 1
-                    : Math.max(
-                        1,
-                        chain.getStages().size()
-                    );
+            chain == null
+                ? 1
+                : Math.max(
+                    1,
+                    chain.getStages().size()
+                );
 
         boolean claimable =
-                QuestChainPolicy.CLAIMABLE.equals(state);
+            QuestChainPolicy.CLAIMABLE
+                .equals(state);
 
         boolean active =
-                QuestChainPolicy.ACTIVE.equals(state);
+            QuestChainPolicy.ACTIVE
+                .equals(state);
 
         boolean locked =
-                QuestChainPolicy.LOCKED_CHAIN.equals(state)
-                    || QuestChainPolicy.LOCKED_LEVEL.equals(state);
+            QuestChainPolicy.LOCKED_CHAIN
+                .equals(state)
+            || QuestChainPolicy.LOCKED_LEVEL
+                .equals(state);
 
         return new QuestView(
             quest.getId(),
@@ -550,27 +631,6 @@ public final class QuestViewService {
                 .getPlayer(playerId);
     }
 
-    private static QuestView findQuestView(
-            List<QuestView> quests,
-            String questId) {
-
-        if (questId == null || quests == null) {
-            return null;
-        }
-
-        for (QuestView quest : quests) {
-            if (quest != null
-                    && questId.equalsIgnoreCase(
-                        quest.getId()
-                    )) {
-
-                return quest;
-            }
-        }
-
-        return null;
-    }
-
     private static int calculatePercent(
             int current,
             int maximum) {
@@ -580,8 +640,10 @@ public final class QuestViewService {
         }
 
         double ratio =
-                (double) Math.max(0, current)
-                    / (double) maximum;
+            (double) Math.max(
+                0,
+                current
+            ) / (double) maximum;
 
         if (Double.isNaN(ratio)
                 || Double.isInfinite(ratio)) {
@@ -667,5 +729,51 @@ public final class QuestViewService {
             ? ""
             : value.trim()
                 .toLowerCase(Locale.ROOT);
+    }
+
+    private static final class CacheEntry {
+
+        private final long revision;
+        private final long createdAt;
+        private final PlayerQuestSnapshot snapshot;
+
+        private CacheEntry(
+                long revision,
+                long createdAt,
+                PlayerQuestSnapshot snapshot) {
+
+            this.revision = revision;
+            this.createdAt = createdAt;
+            this.snapshot = snapshot;
+        }
+    }
+
+    private static final class PlayerQuestSnapshot {
+
+        private final List<QuestView> quests;
+        private final Map<String, QuestView> questsById;
+
+        private final List<QuestChainView> chains;
+        private final Map<String, QuestChainView> chainsById;
+
+        private final int claimableQuestCount;
+
+        private PlayerQuestSnapshot(
+                List<QuestView> quests,
+                Map<String, QuestView> questsById,
+                List<QuestChainView> chains,
+                Map<String, QuestChainView> chainsById,
+                int claimableQuestCount) {
+
+            this.quests = quests;
+            this.questsById = questsById;
+            this.chains = chains;
+            this.chainsById = chainsById;
+            this.claimableQuestCount =
+                Math.max(
+                    0,
+                    claimableQuestCount
+                );
+        }
     }
 }
