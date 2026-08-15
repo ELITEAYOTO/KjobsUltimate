@@ -59,7 +59,7 @@
             <systemPath>${project.basedir}/libs/PlaceholderAPI-2.11.3.jar</systemPath>
         </dependency>
 
-        <!-- Contrat public Kgui V2 uniquement. Le plugin reste un softdepend. -->
+        <!-- Kgui V2 est une dÃ©pendance runtime obligatoire de KjobsUltimate V3. -->
         <dependency>
             <groupId>com.github.ELITEAYOTO.Kgui</groupId>
             <artifactId>kgui-api</artifactId>

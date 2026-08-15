@@ -233,11 +233,6 @@ anti_abuse:
 #             false → aucun placeholder KjobsUltimate disponible en externe.
 #             Requiert PlaceholderAPI installé. Placeholders disponibles dans tab.yml.
 #
-# kchat
-#   enabled                   : intégration Kchat (chat formatting, tab list).
-#   disable_tab_header_footer : true  → KjobsUltimate prend la main sur le header/footer.
-#                                        Configurer dans tab.yml.
-#                               false → Kchat garde la main sur le tab list.
 #
 # kgui
 #   enabled : true  → menus /jobs affichés via l'API publique Kgui V2.
@@ -256,11 +251,6 @@ hooks:
   vault:
     enabled: true
   placeholderapi:
-    enabled: true
-  kchat:
-    enabled: true
-    disable_tab_header_footer: true
-  kgui:
     enabled: true
   worldguard:
     enabled: false
