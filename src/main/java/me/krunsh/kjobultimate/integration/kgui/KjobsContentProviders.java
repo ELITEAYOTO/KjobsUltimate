@@ -2,7 +2,6 @@ package me.krunsh.kjobultimate.integration.kgui;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,24 +25,24 @@ import me.krunsh.kgui.api.KguiApi;
 import me.krunsh.kgui.api.OwnedRegistration;
 import me.krunsh.kjobultimate.KjobUltimate;
 import me.krunsh.kjobultimate.data.PlayerData;
-import me.krunsh.kjobultimate.data.QuestData;
 import me.krunsh.kjobultimate.data.RankingEntry;
 import me.krunsh.kjobultimate.hooks.KguiHook;
 import me.krunsh.kjobultimate.jobs.JobDefinition;
-import me.krunsh.kjobultimate.quests.QuestDefinition;
 import me.krunsh.kjobultimate.util.KjobLogger;
 import me.krunsh.kjobultimate.view.JobView;
 import me.krunsh.kjobultimate.view.PlayerJobsView;
+import me.krunsh.kjobultimate.view.QuestChainView;
+import me.krunsh.kjobultimate.view.QuestView;
 
 /**
  * Providers Kjobs V3.
  *
- * Les providers jobs/job_detail consomment désormais JobsViewService afin que
- * Kgui n'ait plus sa propre implémentation des calculs de niveau, XP, slots ou
- * état d'un métier.
+ * Les providers jobs et quêtes consomment les couches View communes :
  *
- * Les providers quêtes et classement seront migrés vers les couches View dans
- * les étapes V3 suivantes.
+ * JobsViewService
+ * QuestViewService
+ *
+ * Aucun calcul de progression métier n'est dupliqué dans Kgui.
  */
 public final class KjobsContentProviders implements AutoCloseable {
 
@@ -100,11 +99,10 @@ public final class KjobsContentProviders implements AutoCloseable {
         invalidateRevision();
     }
 
-    /**
-     * Liste des métiers.
-     *
-     * Toute la progression vient de PlayerJobsView/JobView.
-     */
+    // -------------------------------------------------------------------------
+    // JOBS
+    // -------------------------------------------------------------------------
+
     private ContentSnapshot jobs(ContentRequest request) {
 
         PlayerJobsView playerView =
@@ -197,12 +195,6 @@ public final class KjobsContentProviders implements AutoCloseable {
         );
     }
 
-    /**
-     * Détail d'un métier.
-     *
-     * Les trois entrées du provider reçoivent le même contrat d'attributs
-     * métier afin que les fichiers YAML Kgui restent entièrement configurables.
-     */
     private ContentSnapshot jobDetail(ContentRequest request) {
 
         PlayerJobsView playerView =
@@ -398,21 +390,22 @@ public final class KjobsContentProviders implements AutoCloseable {
         );
     }
 
-    /**
-     * Provider quêtes V2 encore conservé pendant la migration.
-     *
-     * Il sera remplacé par QuestView/QuestChainView lors de V3.4.
-     */
+    // -------------------------------------------------------------------------
+    // QUÊTES V3 — UNE ENTRÉE PAR CHAÎNE
+    // -------------------------------------------------------------------------
+
     private ContentSnapshot quests(ContentRequest request) {
 
-        PlayerData data = data(request.getPlayerId());
-
-        if (data == null
-                || plugin.getQuestManager() == null
-                || !plugin.getQuestManager().isEnabled()) {
+        if (plugin.getQuestManager() == null
+                || !plugin.getQuestManager().isEnabled()
+                || plugin.getQuestViewService() == null) {
 
             return ContentSnapshot.empty(revision());
         }
+
+        List<QuestChainView> allChains =
+                plugin.getQuestViewService()
+                    .getChains(request.getPlayerId());
 
         String filter =
                 normalizeJob(
@@ -420,110 +413,153 @@ public final class KjobsContentProviders implements AutoCloseable {
                         .get("job_id")
                 );
 
-        Collection<QuestDefinition> source =
-                filter == null
-                    ? plugin.getQuestManager().getQuests()
-                    : plugin.getQuestManager().getQuestsForJob(filter);
+        List<QuestChainView> chains =
+                new ArrayList<QuestChainView>();
 
-        List<QuestDefinition> definitions =
-                new ArrayList<QuestDefinition>(source);
+        for (QuestChainView chain : allChains) {
+
+            if (chain == null) {
+                continue;
+            }
+
+            if (filter != null
+                    && !filter.equalsIgnoreCase(
+                        chain.getJobId()
+                    )) {
+
+                continue;
+            }
+
+            chains.add(chain);
+        }
 
         List<ContentItem> items =
                 new ArrayList<ContentItem>();
 
-        for (QuestDefinition quest : slice(definitions, request)) {
+        for (QuestChainView chain
+                : slice(chains, request)) {
 
-            QuestData progress =
-                    data.getQuestProgress()
-                        .get(quest.getId());
-
-            int current =
-                    progress == null
-                        ? 0
-                        : Math.max(
-                            0,
-                            progress.getProgress()
-                        );
-
-            int amount =
-                    Math.max(
-                        1,
-                        quest.getAmount()
-                    );
-
-            int percent =
-                    Math.min(
-                        100,
-                        (int) ((current * 100L) / amount)
-                    );
-
-            String state =
-                    plugin.getQuestManager()
-                        .getQuestState(data, quest);
+            QuestView current =
+                    currentQuest(chain);
 
             Map<String, String> attributes =
                     new LinkedHashMap<String, String>();
 
-            attributes.put(
-                "quest_id",
-                quest.getId()
+            putQuestChainAttributes(
+                attributes,
+                chain
             );
 
-            attributes.put(
-                "job_id",
-                quest.getJobId()
-            );
+            if (current != null) {
 
-            if ("claimable".equalsIgnoreCase(state)) {
-                attributes.put(
-                    "actions",
-                    "[kjobsultimate:claim_quest] quest_id="
-                        + quest.getId()
+                putQuestAttributes(
+                    attributes,
+                    current
                 );
+
+                if (current.isClaimable()) {
+                    attributes.put(
+                        "actions",
+                        "[kjobsultimate:claim_quest] quest_id="
+                            + current.getId()
+                    );
+                }
             }
+
+            String state =
+                    current == null
+                        ? chain.getState()
+                        : current.getState();
+
+            String stateName =
+                    current == null
+                        ? chain.getStateName()
+                        : current.getStateName();
 
             List<String> lore =
                     new ArrayList<String>();
 
             lore.add(
                 "&7Job: &f"
-                    + displayJob(quest.getJobId())
+                    + displayJobName(chain.getJobId())
             );
 
             lore.add(
-                "&7État: &f"
-                    + state
+                "&7Chaîne: &f"
+                    + chain.getDisplayName()
             );
 
             lore.add(
-                "&7Progression: &a"
-                    + current
-                    + "&7/&a"
-                    + amount
-                    + " &8("
-                    + percent
-                    + "%)"
+                "&7État: "
+                    + questColor(state)
+                    + stateName
             );
 
             lore.add(
-                "&7Récompense XP: &b"
-                    + quest.getRewardXp()
+                "&7Étape: &e"
+                    + chain.getCurrentStage()
+                    + "&7/&e"
+                    + chain.getStageTotal()
             );
 
-            if ("claimable".equalsIgnoreCase(state)) {
+            if (current != null) {
+
+                lore.add("");
+
                 lore.add(
-                    "&aClic: récupérer la récompense"
+                    "&f" + current.getDisplayName()
+                );
+
+                lore.add(
+                    "&7Progression: &a"
+                        + current.getProgress()
+                        + "&7/&a"
+                        + current.getAmount()
+                        + " &8("
+                        + current.getPercent()
+                        + "%)"
+                );
+
+                lore.add(
+                    "&7Restant: &b"
+                        + current.getRemaining()
+                );
+
+                lore.add(
+                    "&7Récompense XP: &d"
+                        + current.getRewardXp()
+                );
+
+                if (current.isClaimable()) {
+                    lore.add("");
+                    lore.add(
+                        "&aClic: récupérer la récompense"
+                    );
+                }
+            } else {
+                lore.add("");
+                lore.add(
+                    "&7Progression globale: &a"
+                        + chain.getPercent()
+                        + "%"
                 );
             }
 
             items.add(
                 item(
-                    "quest/" + stableId(quest.getId()),
+                    "quest-chain/"
+                        + stableId(chain.getId()),
+
                     questMaterial(state),
+
                     questData(state),
+
                     questColor(state),
-                    quest.getDisplayName(),
+
+                    chain.getDisplayName(),
+
                     lore,
+
                     attributes
                 )
             );
@@ -532,13 +568,269 @@ public final class KjobsContentProviders implements AutoCloseable {
         return new ContentSnapshot(
             revision(),
             items,
-            definitions.size()
+            chains.size()
         );
     }
 
-    /**
-     * Classement SQL asynchrone + cache court.
-     */
+    private QuestView currentQuest(
+            QuestChainView chain) {
+
+        if (chain == null) {
+            return null;
+        }
+
+        if (chain.getActiveQuest() != null) {
+            return chain.getActiveQuest();
+        }
+
+        List<QuestView> stages =
+                chain.getStages();
+
+        if (stages == null || stages.isEmpty()) {
+            return null;
+        }
+
+        /*
+         * Chaîne entièrement claim : on conserve la dernière étape comme
+         * contexte visuel, mais aucune action n'est attachée.
+         */
+        return stages.get(
+            stages.size() - 1
+        );
+    }
+
+    private void putQuestChainAttributes(
+            Map<String, String> attributes,
+            QuestChainView chain) {
+
+        if (attributes == null || chain == null) {
+            return;
+        }
+
+        attributes.put(
+            "chain_id",
+            chain.getId()
+        );
+
+        attributes.put(
+            "chain_name",
+            chain.getDisplayName()
+        );
+
+        attributes.put(
+            "job_id",
+            chain.getJobId()
+        );
+
+        attributes.put(
+            "chain_stage",
+            String.valueOf(chain.getCurrentStage())
+        );
+
+        attributes.put(
+            "chain_total",
+            String.valueOf(chain.getStageTotal())
+        );
+
+        attributes.put(
+            "chain_completed",
+            String.valueOf(chain.getCompletedStages())
+        );
+
+        attributes.put(
+            "chain_claimed",
+            String.valueOf(chain.getClaimedStages())
+        );
+
+        attributes.put(
+            "chain_claimable",
+            String.valueOf(chain.getClaimableStages())
+        );
+
+        attributes.put(
+            "chain_remaining",
+            String.valueOf(chain.getRemainingStages())
+        );
+
+        attributes.put(
+            "chain_unclaimed",
+            String.valueOf(chain.getUnclaimedStages())
+        );
+
+        attributes.put(
+            "chain_progress",
+            String.valueOf(chain.getProgress())
+        );
+
+        attributes.put(
+            "chain_amount",
+            String.valueOf(chain.getAmount())
+        );
+
+        attributes.put(
+            "chain_percent",
+            String.valueOf(chain.getPercent())
+        );
+
+        attributes.put(
+            "chain_complete",
+            String.valueOf(chain.isComplete())
+        );
+
+        attributes.put(
+            "chain_fully_claimed",
+            String.valueOf(chain.isFullyClaimed())
+        );
+
+        attributes.put(
+            "chain_job_active",
+            String.valueOf(chain.isJobActive())
+        );
+
+        attributes.put(
+            "chain_state",
+            chain.getState()
+        );
+
+        attributes.put(
+            "chain_state_name",
+            chain.getStateName()
+        );
+
+        attributes.put(
+            "chain_state_color",
+            chain.getStateColor()
+        );
+    }
+
+    private void putQuestAttributes(
+            Map<String, String> attributes,
+            QuestView quest) {
+
+        if (attributes == null || quest == null) {
+            return;
+        }
+
+        attributes.put(
+            "quest_id",
+            quest.getId()
+        );
+
+        attributes.put(
+            "quest_name",
+            quest.getDisplayName()
+        );
+
+        attributes.put(
+            "quest_job_id",
+            quest.getJobId()
+        );
+
+        attributes.put(
+            "quest_type",
+            quest.getType()
+        );
+
+        attributes.put(
+            "quest_target",
+            quest.getTarget()
+        );
+
+        attributes.put(
+            "quest_progress",
+            String.valueOf(quest.getProgress())
+        );
+
+        attributes.put(
+            "quest_amount",
+            String.valueOf(quest.getAmount())
+        );
+
+        attributes.put(
+            "quest_remaining",
+            String.valueOf(quest.getRemaining())
+        );
+
+        attributes.put(
+            "quest_percent",
+            String.valueOf(quest.getPercent())
+        );
+
+        attributes.put(
+            "quest_min_level",
+            String.valueOf(quest.getMinLevel())
+        );
+
+        attributes.put(
+            "quest_reward_xp",
+            String.valueOf(quest.getRewardXp())
+        );
+
+        attributes.put(
+            "quest_stage",
+            String.valueOf(quest.getStage())
+        );
+
+        attributes.put(
+            "quest_stage_total",
+            String.valueOf(quest.getStageTotal())
+        );
+
+        attributes.put(
+            "quest_state",
+            quest.getState()
+        );
+
+        attributes.put(
+            "quest_state_name",
+            quest.getStateName()
+        );
+
+        attributes.put(
+            "quest_state_color",
+            quest.getStateColor()
+        );
+
+        attributes.put(
+            "quest_completed",
+            String.valueOf(quest.isCompleted())
+        );
+
+        attributes.put(
+            "quest_claimed",
+            String.valueOf(quest.isClaimed())
+        );
+
+        attributes.put(
+            "quest_claimable",
+            String.valueOf(quest.isClaimable())
+        );
+
+        attributes.put(
+            "quest_active",
+            String.valueOf(quest.isActive())
+        );
+
+        attributes.put(
+            "quest_locked",
+            String.valueOf(quest.isLocked())
+        );
+
+        attributes.put(
+            "quest_job_active",
+            String.valueOf(quest.isJobActive())
+        );
+
+        attributes.put(
+            "quest_completed_at",
+            String.valueOf(quest.getCompletedAt())
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // CLASSEMENT
+    // -------------------------------------------------------------------------
+
     private ContentSnapshot ranking(ContentRequest request) {
 
         String filter =
@@ -648,6 +940,10 @@ public final class KjobsContentProviders implements AutoCloseable {
         );
     }
 
+    // -------------------------------------------------------------------------
+    // ABANDON
+    // -------------------------------------------------------------------------
+
     private ContentSnapshot leaveConfirmation(ContentRequest request) {
 
         PlayerData data =
@@ -717,13 +1013,10 @@ public final class KjobsContentProviders implements AutoCloseable {
         );
     }
 
-    /**
-     * Contrat d'attributs Kgui V3 pour un métier.
-     *
-     * Tous les providers représentant un métier passent par cette méthode.
-     * Cela évite qu'un menu fournisse level/xp mais qu'un autre oublie percent,
-     * slot ou daily_xp.
-     */
+    // -------------------------------------------------------------------------
+    // CONTRAT ATTRIBUTS JOB
+    // -------------------------------------------------------------------------
+
     private void putJobAttributes(
             Map<String, String> attributes,
             PlayerJobsView player,
@@ -732,6 +1025,7 @@ public final class KjobsContentProviders implements AutoCloseable {
         if (attributes == null
                 || player == null
                 || job == null) {
+
             return;
         }
 
@@ -756,7 +1050,6 @@ public final class KjobsContentProviders implements AutoCloseable {
                         ? "&a"
                         : "&8";
 
-        // Identité
         attributes.put(
             "job_id",
             job.getId()
@@ -767,7 +1060,6 @@ public final class KjobsContentProviders implements AutoCloseable {
             job.getDisplayName()
         );
 
-        // Progression
         attributes.put(
             "level",
             String.valueOf(job.getLevel())
@@ -803,7 +1095,6 @@ public final class KjobsContentProviders implements AutoCloseable {
             String.valueOf(job.isMaxLevelReached())
         );
 
-        // Etat / slots
         attributes.put(
             "active",
             String.valueOf(job.isActive())
@@ -834,7 +1125,6 @@ public final class KjobsContentProviders implements AutoCloseable {
             stateColor
         );
 
-        // XP journalier
         attributes.put(
             "daily_xp",
             String.valueOf(job.getDailyXp())
@@ -855,7 +1145,6 @@ public final class KjobsContentProviders implements AutoCloseable {
             String.valueOf(job.isDailyXpCapEnabled())
         );
 
-        // Etat global du joueur
         attributes.put(
             "global_level",
             String.valueOf(player.getGlobalLevel())
@@ -881,7 +1170,6 @@ public final class KjobsContentProviders implements AutoCloseable {
             String.valueOf(player.getMaxSlots())
         );
 
-        // Apparence
         attributes.put(
             "icon_material",
             job.getIconMaterial()
@@ -899,6 +1187,10 @@ public final class KjobsContentProviders implements AutoCloseable {
             );
         }
     }
+
+    // -------------------------------------------------------------------------
+    // RANKING ASYNC
+    // -------------------------------------------------------------------------
 
     private void triggerRankingLoad(
             final String key,
@@ -1020,6 +1312,10 @@ public final class KjobsContentProviders implements AutoCloseable {
             );
     }
 
+    // -------------------------------------------------------------------------
+    // UTILITAIRES
+    // -------------------------------------------------------------------------
+
     private PlayerData data(UUID playerId) {
         return playerId == null
             ? null
@@ -1030,7 +1326,8 @@ public final class KjobsContentProviders implements AutoCloseable {
         return revisionEpoch.get();
     }
 
-    private String displayJob(String jobId) {
+    private String displayJobName(String jobId) {
+
         JobDefinition job =
                 plugin.getJobRegistry()
                     .getJob(jobId);
@@ -1059,6 +1356,7 @@ public final class KjobsContentProviders implements AutoCloseable {
 
         if (name != null
                 && !name.trim().isEmpty()) {
+
             return name;
         }
 
@@ -1129,6 +1427,10 @@ public final class KjobsContentProviders implements AutoCloseable {
             return "REDSTONE";
         }
 
+        if ("locked_chain".equalsIgnoreCase(state)) {
+            return "IRON_FENCE";
+        }
+
         if ("paused_job".equalsIgnoreCase(state)) {
             return "INK_SACK";
         }
@@ -1154,6 +1456,7 @@ public final class KjobsContentProviders implements AutoCloseable {
 
         if (state != null
                 && state.startsWith("locked")) {
+
             return "&c";
         }
 
@@ -1234,6 +1537,7 @@ public final class KjobsContentProviders implements AutoCloseable {
 
         if (source == null
                 || source.isEmpty()) {
+
             return Collections.emptyList();
         }
 
