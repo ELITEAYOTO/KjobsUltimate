@@ -11,13 +11,9 @@ import me.krunsh.kjobultimate.util.KjobLogger;
 /**
  * Charge et expose les fichiers de configuration YAML de KjobsUltimate.
  *
- * Les fichiers jobs/ sont chargés via JobRegistry.
- *
- * V3.10 :
- * - après un reload de configuration, les caches de View existants sont
- *   invalidés globalement ;
- * - au premier démarrage les services View ne sont pas encore créés, donc
- *   clearViewCaches() est volontairement sans effet.
+ * V3.11 :
+ * - tab.yml n'appartient plus à KjobsUltimate ;
+ * - le TAB sera configuré dans le plugin Ktab séparé.
  */
 public final class ConfigManager {
 
@@ -27,15 +23,11 @@ public final class ConfigManager {
     private FileConfiguration messagesConfig;
     private FileConfiguration soundsConfig;
     private FileConfiguration hudConfig;
-    private FileConfiguration tabConfig;
 
     public ConfigManager(KjobUltimate plugin) {
         this.plugin = plugin;
     }
 
-    /**
-     * Charge ou recharge tous les fichiers de configuration.
-     */
     public void loadAll() {
 
         plugin.saveDefaultConfig();
@@ -53,22 +45,11 @@ public final class ConfigManager {
         hudConfig =
             loadOrCreate("hud.yml");
 
-        /*
-         * Temporaire : tab.yml restera chargé tant que le module TAB historique
-         * n'aura pas été extrait dans Ktab.
-         */
-        tabConfig =
-            loadOrCreate("tab.yml");
-
-        /*
-         * Une définition de job, quête, slot ou cap peut avoir changé sans
-         * mutation de PlayerData : on invalide donc explicitement les snapshots.
-         */
         plugin.clearViewCaches();
 
         KjobLogger.info(
             "Configs rechargees "
-                + "(main + messages + sounds + hud + tab)"
+                + "(main + messages + sounds + hud)"
         );
     }
 
@@ -91,10 +72,6 @@ public final class ConfigManager {
         return YamlConfiguration
             .loadConfiguration(file);
     }
-
-    // -------------------------------------------------------------------------
-    // config.yml
-    // -------------------------------------------------------------------------
 
     public boolean isDebug() {
         return mainConfig.getBoolean(
@@ -218,10 +195,6 @@ public final class ConfigManager {
         );
     }
 
-    // -------------------------------------------------------------------------
-    // Accesseurs bruts
-    // -------------------------------------------------------------------------
-
     public FileConfiguration getMainConfig() {
         return mainConfig;
     }
@@ -237,14 +210,6 @@ public final class ConfigManager {
     public FileConfiguration getHudConfig() {
         return hudConfig;
     }
-
-    public FileConfiguration getTabConfig() {
-        return tabConfig;
-    }
-
-    // -------------------------------------------------------------------------
-    // Messages
-    // -------------------------------------------------------------------------
 
     public String getMessage(
             String key,
