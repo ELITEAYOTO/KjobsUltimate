@@ -31,7 +31,12 @@ import me.krunsh.kjobultimate.view.QuestViewService;
  *  5. listeners / commandes
  *  6. HUD / TAB historique
  *
- * Kgui V2 est désormais l'unique moteur GUI de KjobsUltimate.
+ * Kgui V2 est l'unique moteur GUI de KjobsUltimate.
+ *
+ * V3.10 :
+ * - l'invalidation des Views est centralisée ici ;
+ * - toute mutation notifiée à l'UI invalide d'abord les snapshots RAM ;
+ * - les reloads peuvent vider globalement les caches via clearViewCaches().
  */
 public final class KjobUltimate extends JavaPlugin {
 
@@ -56,7 +61,7 @@ public final class KjobUltimate extends JavaPlugin {
 
     /*
      * Temporaire V3 :
-     * le TAB sera extrait plus tard dans Ktab.
+     * le TAB sera extrait dans Ktab lors de la prochaine phase dédiée.
      */
     private TabManager tabManager;
 
@@ -135,10 +140,6 @@ public final class KjobUltimate extends JavaPlugin {
                     databaseManager
                 );
 
-            /*
-             * Sources de vérité communes utilisées par Kgui / PAPI.
-             * Elles travaillent depuis PlayerData déjà chargé en RAM.
-             */
             jobsViewService =
                 new JobsViewService(this);
 
@@ -227,6 +228,8 @@ public final class KjobUltimate extends JavaPlugin {
         if (tabManager != null) {
             tabManager.shutdown();
         }
+
+        clearViewCaches();
 
         if (playerDataManager != null) {
 
@@ -383,12 +386,19 @@ public final class KjobUltimate extends JavaPlugin {
     }
 
     /**
-     * Point unique d'invalidation Kgui.
+     * Invalide immédiatement les snapshots d'un joueur puis notifie Kgui.
+     *
+     * PlayerData.viewRevision reste la sécurité principale contre les snapshots
+     * périmés. Cette invalidation explicite évite toutefois de conserver une
+     * entrée devenue inutile et garantit que les consommateurs relisent le
+     * prochain snapshot dès la notification.
      */
     public void notifyJobsUiChanged(
             UUID playerId,
             String reason,
             String... menuIds) {
+
+        invalidateViewCaches(playerId);
 
         if (hookManager != null) {
 
@@ -397,6 +407,39 @@ public final class KjobUltimate extends JavaPlugin {
                 reason,
                 menuIds
             );
+        }
+    }
+
+    /**
+     * Invalidation ciblée des snapshots Jobs + Quêtes.
+     */
+    public void invalidateViewCaches(
+            UUID playerId) {
+
+        if (playerId == null) {
+            return;
+        }
+
+        if (jobsViewService != null) {
+            jobsViewService.invalidate(playerId);
+        }
+
+        if (questViewService != null) {
+            questViewService.invalidate(playerId);
+        }
+    }
+
+    /**
+     * Invalidation globale, notamment après reload des catalogues/configs.
+     */
+    public void clearViewCaches() {
+
+        if (jobsViewService != null) {
+            jobsViewService.clearCache();
+        }
+
+        if (questViewService != null) {
+            questViewService.clearCache();
         }
     }
 }
