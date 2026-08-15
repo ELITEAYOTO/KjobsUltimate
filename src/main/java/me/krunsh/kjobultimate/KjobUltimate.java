@@ -14,6 +14,7 @@ import me.krunsh.kjobultimate.slots.SlotManager;
 import me.krunsh.kjobultimate.tab.TabManager;
 import me.krunsh.kjobultimate.util.KjobLogger;
 import me.krunsh.kjobultimate.validation.ConfigValidator;
+import me.krunsh.kjobultimate.view.JobsViewService;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.UUID;
@@ -23,7 +24,7 @@ import java.util.UUID;
  * Ordre de démarrage strict :
  *   1. Logger
  *   2. Config + jobs
- *   3. Storage SQLite/MySQL
+ *   3. Storage SQLite/MySQL + vues de présentation
  *   4. Hooks externes (Vault, PAPI, Kgui, Kcraft, Kstacker)
  *   5. Listeners + commandes
  */
@@ -42,6 +43,7 @@ public final class KjobUltimate extends JavaPlugin {
     private TabManager        tabManager;
     private GuiManager        guiManager;
     private QuestManager      questManager;
+    private JobsViewService   jobsViewService;
 
     @Override
     public void onEnable() {
@@ -61,7 +63,7 @@ public final class KjobUltimate extends JavaPlugin {
             questManager = new QuestManager(this);
             questManager.loadAll();
             new ConfigValidator(this).validateOrThrow();
-            xpManager  = new XpManager(this);
+            xpManager = new XpManager(this);
             slotManager = new SlotManager(this);
             guiManager = new GuiManager(this);
             guiManager.loadAll();
@@ -72,12 +74,31 @@ public final class KjobUltimate extends JavaPlugin {
             return;
         }
 
-        // 3. Storage SQLite/MySQL
+        // 3. Storage SQLite/MySQL + couche View V3
         try {
             databaseManager = new DatabaseManager(this);
             databaseManager.initialize();
-            playerDataManager = new PlayerDataManager(this, databaseManager);
-            KjobLogger.success("Storage " + databaseManager.getStorageTypeName() + " connecte - " + databaseManager.getDbPath());
+
+            playerDataManager = new PlayerDataManager(
+                this,
+                databaseManager
+            );
+
+            /*
+             * V3 — source de vérité commune pour les couches de présentation.
+             *
+             * JobsViewService ne fait aucune lecture SQL :
+             * il construit des snapshots immuables à partir de PlayerData déjà
+             * chargé en RAM, puis ceux-ci sont consommés par Kgui/PAPI/HUD.
+             */
+            jobsViewService = new JobsViewService(this);
+
+            KjobLogger.success(
+                "Storage "
+                    + databaseManager.getStorageTypeName()
+                    + " connecte - "
+                    + databaseManager.getDbPath()
+            );
         } catch (Exception e) {
             KjobLogger.error("Impossible d'initialiser le storage", e);
             getServer().getPluginManager().disablePlugin(this);
@@ -97,7 +118,11 @@ public final class KjobUltimate extends JavaPlugin {
         tabManager = new TabManager(this);
 
         long elapsed = System.currentTimeMillis() - start;
-        KjobLogger.printLoadSummary(jobRegistry.getJobCount(), hookManager.getRegisteredProviders(), elapsed);
+        KjobLogger.printLoadSummary(
+            jobRegistry.getJobCount(),
+            hookManager.getRegisteredProviders(),
+            elapsed
+        );
     }
 
     @Override
@@ -122,32 +147,56 @@ public final class KjobUltimate extends JavaPlugin {
     }
 
     private void registerListeners() {
-        getServer().getPluginManager().registerEvents(new PlayerConnectionListener(this), this);
-        if (guiManager != null) getServer().getPluginManager().registerEvents(guiManager, this);
+        getServer().getPluginManager().registerEvents(
+            new PlayerConnectionListener(this),
+            this
+        );
+
+        if (guiManager != null) {
+            getServer().getPluginManager().registerEvents(guiManager, this);
+        }
+
         // Phase 3+4 : listeners de jobs métier
         getServer().getPluginManager().registerEvents(
-            new me.krunsh.kjobultimate.listeners.jobs.MinerListener(this), this);
+            new me.krunsh.kjobultimate.listeners.jobs.MinerListener(this),
+            this
+        );
         getServer().getPluginManager().registerEvents(
-            new me.krunsh.kjobultimate.listeners.jobs.FarmerListener(this), this);
+            new me.krunsh.kjobultimate.listeners.jobs.FarmerListener(this),
+            this
+        );
         getServer().getPluginManager().registerEvents(
-            new me.krunsh.kjobultimate.listeners.jobs.HunterListener(this), this);
+            new me.krunsh.kjobultimate.listeners.jobs.HunterListener(this),
+            this
+        );
         getServer().getPluginManager().registerEvents(
-            new me.krunsh.kjobultimate.listeners.jobs.PretorienListener(this), this);
+            new me.krunsh.kjobultimate.listeners.jobs.PretorienListener(this),
+            this
+        );
         getServer().getPluginManager().registerEvents(
-            new me.krunsh.kjobultimate.listeners.jobs.ArtisanListener(this), this);
+            new me.krunsh.kjobultimate.listeners.jobs.ArtisanListener(this),
+            this
+        );
         getServer().getPluginManager().registerEvents(
-            new me.krunsh.kjobultimate.listeners.jobs.PilleurListener(this), this);
+            new me.krunsh.kjobultimate.listeners.jobs.PilleurListener(this),
+            this
+        );
         getServer().getPluginManager().registerEvents(
-            new me.krunsh.kjobultimate.listeners.quests.QuestActionListener(this), this);
-        // TODO Phase 7 : ContentProviders Kgui
+            new me.krunsh.kjobultimate.listeners.quests.QuestActionListener(this),
+            this
+        );
     }
 
     private void registerCommands() {
-        me.krunsh.kjobultimate.commands.KjobCommand jobCmd = new me.krunsh.kjobultimate.commands.KjobCommand(this);
+        me.krunsh.kjobultimate.commands.KjobCommand jobCmd =
+            new me.krunsh.kjobultimate.commands.KjobCommand(this);
+
         getCommand("jobs").setExecutor(jobCmd);
         getCommand("jobs").setTabCompleter(jobCmd);
 
-        me.krunsh.kjobultimate.commands.KjobAdminCommand adminCmd = new me.krunsh.kjobultimate.commands.KjobAdminCommand(this);
+        me.krunsh.kjobultimate.commands.KjobAdminCommand adminCmd =
+            new me.krunsh.kjobultimate.commands.KjobAdminCommand(this);
+
         getCommand("kjobs").setExecutor(adminCmd);
         getCommand("kjobs").setTabCompleter(adminCmd);
     }
@@ -202,8 +251,18 @@ public final class KjobUltimate extends JavaPlugin {
         return questManager;
     }
 
+    public JobsViewService getJobsViewService() {
+        return jobsViewService;
+    }
+
     /** Point unique d'invalidation optionnelle, sans importer Kgui dans le métier. */
-    public void notifyJobsUiChanged(UUID playerId, String reason, String... menuIds) {
-        if (hookManager != null) hookManager.invalidateKgui(playerId, reason, menuIds);
+    public void notifyJobsUiChanged(
+            UUID playerId,
+            String reason,
+            String... menuIds) {
+
+        if (hookManager != null) {
+            hookManager.invalidateKgui(playerId, reason, menuIds);
+        }
     }
 }
