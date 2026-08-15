@@ -1,47 +1,41 @@
 # ============================================================
-# KjobsUltimate - Quetes permanentes V1
+# KjobsUltimate V3.14.1 — Quêtes permanentes
 # ============================================================
 #
-# Objectif V1:
-# - quetes permanentes, pas de daily/weekly/reset automatique;
-# - progression sauvegardee en SQLite/MySQL;
-# - une recompense claimable une seule fois;
-# - le GUI de claim sera branche sur QuestManager.claimReward().
+# Une action physique ne fait progresser qu'une étape de chaque chaîne.
+# Plusieurs chaînes différentes peuvent progresser en même temps.
 #
-# Types supportes:
-#   MINE              target = Material casse par le mineur
-#   HARVEST           target = Material recolte par farmer
-#   KILL              target = EntityType tue par hunter
-#   CRAFT             target = Material craft par artisan
-#   PVP_KILL          target = PLAYER ou *
-#   TNT_EXPLODE       target = TNT ou *
-#   DYNAMITE_EXPLODE  target = DYNAMITE ou *
-#   TNT_CRAFT         target = TNT ou *
-#   DYNAMITE_CRAFT    target = DYNAMITE ou *
-#   EAT               target = Material consomme (ex: COOKED_BEEF, GOLDEN_APPLE)
-#   CONSUME           alias large de EAT, target = Material consomme
-#   SMELT             target = Material retire d'un four (ex: IRON_INGOT)
-#   FISH              target = Material peche ou EntityType attrape
-#   FISH_ENTITY       target = EntityType attrape avec la canne
-#   ENCHANT           target = Material enchante
-#   ENCHANT_LEVELS    target = Material enchante, amount = niveaux consommes
-#   PLACE             target = Material pose
-#   TAME              target = EntityType apprivoise (ex: WOLF, OCELOT, HORSE)
+# Types intégrés :
+#   MINE              target = Material / Material:data miné
+#   HARVEST           target = Material récolté
+#   KILL              target = EntityType tué
+#   CRAFT             target = Material du résultat
+#   PVP_KILL          target = PLAYER
+#   TNT_EXPLODE       target = TNT
+#   DYNAMITE_EXPLODE  target = DYNAMITE
+#   TNT_CRAFT         target = TNT
+#   DYNAMITE_CRAFT    target = DYNAMITE
+#   EAT               target = Material consommé
+#   CONSUME           target = Material consommé
+#   SMELT             target = Material retiré d'un four
+#   FISH              target = Material / EntityType attrapé
+#   FISH_ENTITY       target = EntityType attrapé
+#   ENCHANT           target = Material enchanté
+#   ENCHANT_LEVELS    amount = niveaux consommés
+#   PLACE             target = Material posé
+#   TAME              target = EntityType apprivoisé
 #
-# Notes creation:
-# - target: "*" accepte tout pour ce type.
-# - Les Material/EntityType doivent rester en noms Bukkit 1.8.8.
-# - Une quete sans `chain` reste une chaine autonome retrocompatible.
-# - Une suite declare sa chaine dans `chains:`, puis `chain` et `stage`
-#   sur chaque quete. Les etapes doivent etre uniques et contigues (1, 2, 3).
-# - Une seule etape progresse par chaine et par action. Plusieurs chaines
-#   distinctes peuvent progresser simultanement.
+# target: "*" accepte toute cible du type.
 #
-# Recompenses:
-#   rewards.xp       = XP de job donne au claim
-#   rewards.commands = commandes executees au claim
-# Placeholders commandes: {player}, {uuid}, {quest}, {quest_id}, {job}
-# Prefixes commandes: [console], [command], [player], [joueur]
+# rewards.xp :
+#   XP du métier de la quête, accordée au claim.
+#
+# rewards.commands :
+#   [console] commande console
+#   [player]  commande joueur
+#
+# Placeholders :
+#   {player} {uuid} {quest} {quest_id} {job}
 
 enabled: true
 
@@ -49,8 +43,9 @@ chains:
   mineur_stone:
     display_name: "&bSuite Pierre"
     job: mineur
-  farmer_wheat:
-    display_name: "&aSuite Ble"
+
+  farmer_crops:
+    display_name: "&aSuite Blé"
     job: farmer
 
 quests:
@@ -68,12 +63,12 @@ quests:
       commands:
         - "[console] give {player} tripwire_hook 1"
 
-  farmer_wheat_1:
-    display_name: "&aFarmer I &8- &7Ble"
+  farmer_crops_1:
+    display_name: "&aFarmer I &8- &7Blé"
     job: farmer
     type: HARVEST
     target: CROPS
-    chain: farmer_wheat
+    chain: farmer_crops
     stage: 1
     amount: 150
     min_level: 0
@@ -95,7 +90,7 @@ quests:
         - "[console] give {player} tripwire_hook 1"
 
   pretorien_pvp_1:
-    display_name: "&cPretorien I &8- &7Combats"
+    display_name: "&6Prétorien I &8- &7Combats"
     job: pretorien
     type: PVP_KILL
     target: PLAYER
@@ -107,7 +102,7 @@ quests:
         - "[console] give {player} tripwire_hook 1"
 
   artisan_craft_1:
-    display_name: "&6Artisan I &8- &7Crafts"
+    display_name: "&eArtisan I &8- &7Crafts"
     job: artisan
     type: CRAFT
     target: "*"
@@ -119,7 +114,7 @@ quests:
         - "[console] give {player} tripwire_hook 1"
 
   pilleur_tnt_1:
-    display_name: "&4Pilleur I &8- &7TNT"
+    display_name: "&5Pilleur I &8- &7TNT"
     job: pilleur
     type: TNT_EXPLODE
     target: TNT
@@ -131,7 +126,7 @@ quests:
         - "[console] give {player} tripwire_hook 1"
 
   artisan_smelter_1:
-    display_name: "&6Artisan I &8- &7Fonte"
+    display_name: "&eArtisan I &8- &7Fonte"
     job: artisan
     type: SMELT
     target: IRON_INGOT

@@ -19,98 +19,299 @@ public class QuestProgressStoreTest {
 
     @Before
     public void setUp() throws Exception {
-        Class.forName("org.sqlite.JDBC");
-        connection = DriverManager.getConnection("jdbc:sqlite::memory:");
-        try (Statement statement = connection.createStatement()) {
-            statement.execute("CREATE TABLE quest_progress ("
-                    + "uuid TEXT NOT NULL, quest_id TEXT NOT NULL, "
-                    + "progress INTEGER NOT NULL, completed INTEGER NOT NULL, "
-                    + "claimed INTEGER NOT NULL, completed_at INTEGER NOT NULL, "
-                    + "PRIMARY KEY (uuid, quest_id))");
+
+        Class.forName(
+            "org.sqlite.JDBC"
+        );
+
+        connection =
+            DriverManager.getConnection(
+                "jdbc:sqlite::memory:"
+            );
+
+        try (Statement statement =
+                connection.createStatement()) {
+
+            statement.execute(
+                "CREATE TABLE quest_progress ("
+                    + "uuid TEXT NOT NULL, "
+                    + "quest_id TEXT NOT NULL, "
+                    + "progress INTEGER NOT NULL, "
+                    + "completed INTEGER NOT NULL, "
+                    + "claimed INTEGER NOT NULL, "
+                    + "completed_at INTEGER NOT NULL, "
+                    + "PRIMARY KEY (uuid, quest_id))"
+            );
         }
     }
 
     @After
-    public void tearDown() throws Exception {
-        if (connection != null) connection.close();
+    public void tearDown()
+            throws Exception {
+
+        if (connection != null) {
+            connection.close();
+        }
     }
 
     @Test
-    public void lateAsyncSnapshotCannotRegressProgressOrFlags() throws Exception {
-        QuestProgressStore.saveMonotonic(
-                connection, false, "player", "stone_1",
-                10, true, true, 200L);
-        QuestProgressStore.saveMonotonic(
-                connection, false, "player", "stone_1",
-                3, false, false, 0L);
+    public void lateAsyncSnapshotCannotRegressProgressOrFlags()
+            throws Exception {
 
-        Stored row = read();
-        assertEquals(10, row.progress);
-        assertTrue(row.completed);
-        assertTrue(row.claimed);
-        assertEquals(200L, row.completedAt);
+        QuestProgressStore.saveMonotonic(
+            connection,
+            false,
+            "player",
+            "stone_1",
+            10,
+            true,
+            true,
+            200L
+        );
+
+        QuestProgressStore.saveMonotonic(
+            connection,
+            false,
+            "player",
+            "stone_1",
+            3,
+            false,
+            false,
+            0L
+        );
+
+        Stored row =
+            read();
+
+        assertEquals(
+            10,
+            row.progress
+        );
+
+        assertTrue(
+            row.completed
+        );
+
+        assertTrue(
+            row.claimed
+        );
+
+        assertEquals(
+            200L,
+            row.completedAt
+        );
     }
 
     @Test
-    public void earliestNonZeroCompletionTimestampIsPreserved() throws Exception {
-        QuestProgressStore.saveMonotonic(
-                connection, false, "player", "stone_1",
-                10, true, false, 300L);
-        QuestProgressStore.saveMonotonic(
-                connection, false, "player", "stone_1",
-                10, true, false, 200L);
+    public void earliestNonZeroCompletionTimestampIsPreserved()
+            throws Exception {
 
-        assertEquals(200L, read().completedAt);
+        QuestProgressStore.saveMonotonic(
+            connection,
+            false,
+            "player",
+            "stone_1",
+            10,
+            true,
+            false,
+            300L
+        );
+
+        QuestProgressStore.saveMonotonic(
+            connection,
+            false,
+            "player",
+            "stone_1",
+            10,
+            true,
+            false,
+            200L
+        );
+
+        assertEquals(
+            200L,
+            read().completedAt
+        );
     }
 
     @Test
-    public void explicitAdministrativeResetCanMoveStateBackwards() throws Exception {
+    public void sqliteMonotonicSaveDoesNotRequireModernUpsertSyntax()
+            throws Exception {
+
+        String insert =
+            QuestProgressStore
+                .sqliteInsertIfAbsentSql();
+
+        String update =
+            QuestProgressStore
+                .sqliteMonotonicUpdateSql();
+
+        assertFalse(
+            insert.toUpperCase()
+                .contains(
+                    "ON CONFLICT"
+                )
+        );
+
+        assertFalse(
+            update.toUpperCase()
+                .contains(
+                    "ON CONFLICT"
+                )
+        );
+
         QuestProgressStore.saveMonotonic(
-                connection, false, "player", "stone_1",
-                10, true, true, 200L);
+            connection,
+            false,
+            "player",
+            "stone_1",
+            4,
+            false,
+            false,
+            0L
+        );
+
+        assertEquals(
+            4,
+            read().progress
+        );
+    }
+
+    @Test
+    public void explicitAdministrativeResetCanMoveStateBackwards()
+            throws Exception {
+
+        QuestProgressStore.saveMonotonic(
+            connection,
+            false,
+            "player",
+            "stone_1",
+            10,
+            true,
+            true,
+            200L
+        );
+
         QuestProgressStore.replace(
-                connection, false, "player", "stone_1",
-                0, false, false, 0L);
+            connection,
+            false,
+            "player",
+            "stone_1",
+            0,
+            false,
+            false,
+            0L
+        );
 
-        Stored row = read();
-        assertEquals(0, row.progress);
-        assertFalse(row.completed);
-        assertFalse(row.claimed);
-        assertEquals(0L, row.completedAt);
+        Stored row =
+            read();
+
+        assertEquals(
+            0,
+            row.progress
+        );
+
+        assertFalse(
+            row.completed
+        );
+
+        assertFalse(
+            row.claimed
+        );
+
+        assertEquals(
+            0L,
+            row.completedAt
+        );
     }
 
     @Test
     public void mysqlSqlUsesAtomicMonotonicMerge() {
-        String sql = QuestProgressStore.monotonicUpsertSql(true);
-        assertTrue(sql.contains("GREATEST(progress"));
-        assertTrue(sql.contains("GREATEST(completed"));
-        assertTrue(sql.contains("GREATEST(claimed"));
+
+        String sql =
+            QuestProgressStore
+                .monotonicUpsertSql(
+                    true
+                );
+
+        assertTrue(
+            sql.contains(
+                "GREATEST(progress"
+            )
+        );
+
+        assertTrue(
+            sql.contains(
+                "GREATEST(completed"
+            )
+        );
+
+        assertTrue(
+            sql.contains(
+                "GREATEST(claimed"
+            )
+        );
     }
 
-    private Stored read() throws Exception {
-        try (Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery(
-                     "SELECT progress, completed, claimed, completed_at "
-                     + "FROM quest_progress WHERE uuid='player' "
-                     + "AND quest_id='stone_1'")) {
-            assertTrue(result.next());
-            return new Stored(result.getInt(1), result.getInt(2) != 0,
-                    result.getInt(3) != 0, result.getLong(4));
+    private Stored read()
+            throws Exception {
+
+        try (Statement statement =
+                connection.createStatement();
+
+             ResultSet result =
+                statement.executeQuery(
+                    "SELECT progress, completed, claimed, completed_at "
+                        + "FROM quest_progress "
+                        + "WHERE uuid='player' "
+                        + "AND quest_id='stone_1'"
+                )) {
+
+            assertTrue(
+                result.next()
+            );
+
+            return new Stored(
+                result.getInt(
+                    1
+                ),
+                result.getInt(
+                    2
+                ) != 0,
+                result.getInt(
+                    3
+                ) != 0,
+                result.getLong(
+                    4
+                )
+            );
         }
     }
 
     private static final class Stored {
+
         private final int progress;
         private final boolean completed;
         private final boolean claimed;
         private final long completedAt;
 
-        private Stored(int progress, boolean completed,
-                boolean claimed, long completedAt) {
-            this.progress = progress;
-            this.completed = completed;
-            this.claimed = claimed;
-            this.completedAt = completedAt;
+        private Stored(
+                int progress,
+                boolean completed,
+                boolean claimed,
+                long completedAt) {
+
+            this.progress =
+                progress;
+
+            this.completed =
+                completed;
+
+            this.claimed =
+                claimed;
+
+            this.completedAt =
+                completedAt;
         }
     }
 }

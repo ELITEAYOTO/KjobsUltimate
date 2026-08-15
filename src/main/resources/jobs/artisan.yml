@@ -1,62 +1,80 @@
 # ============================================================
-# KjobsUltimate — Job : Artisan
+# KjobsUltimate V3.14.1 — Job : Artisan
 # ============================================================
 #
-# V3.13 — ACCOUNTING DES CRAFTS
+# Base propre :
+# - max_level = 50
+# - courbe XP explicite 1 -> 50, sans fallback partiel
+# - aucune compatibilite d'ancienne config
+# - XP / money / quete utilisent le meme accounting V3.13+
 #
-# Actions vanilla :
-#   clé = Material du résultat (IRON_PICKAXE, ARROW, etc.)
-#
-# Actions Kcraft exactes :
-#   clé = "KCRAFT:<craftId>"
-#   IMPORTANT : garder les guillemets YAML autour de la clé.
-#
-# Ordre Kcraft :
-#   1. "KCRAFT:<craftId>"
-#   2. fallback sur le Material du résultat
-#
-# count_mode:
-#   CRAFTS       = 1 unité par exécution de recette (défaut)
-#   RESULT_ITEMS = 1 unité par item produit
-#
-# Exemple ARROW :
-#   recette x4, 3 exécutions
-#   CRAFTS       => 3 unités
-#   RESULT_ITEMS => 12 unités
-#
-# allow_forced:
-#   false = un craft Kcraft forcé/admin ne donne rien (défaut)
-#   true  = autorise explicitement les crafts forcés
-#
-# Exemple exact Kcraft à copier si besoin :
-#
-#   "KCRAFT:pioche_azurite":
-#     xp: 120
-#     money: 10
-#     silktouch: false
-#     count_mode: CRAFTS
-#     allow_forced: false
-#
-# XP, money, HUD et quêtes utilisent toujours la MÊME quantité.
+# Kcraft exact : utiliser une cle entre guillemets "KCRAFT:<craftId>".
 
 display_name: "§eArtisan"
 description: "§7Maîtrise la fabrication et produit des objets de qualité."
+
 icon:
   material: WORKBENCH
-  nbt_cit: "job_Artisan_icon"
+  nbt_cit: "job_artisan_icon"
+
 max_level: 50
 
 xp_curve:
-  type: linear
+  type: custom
   fallback_type: linear
   fallback_base: 600
-  fallback_multiplier: 1.2
+  fallback_multiplier: 1.0
   custom_levels:
     1: 600
     2: 900
     3: 1300
     4: 1800
     5: 2500
+    6: 2800
+    7: 3100
+    8: 3400
+    9: 3700
+    10: 4100
+    11: 4500
+    12: 5000
+    13: 5500
+    14: 6100
+    15: 6700
+    16: 7400
+    17: 8100
+    18: 8900
+    19: 9800
+    20: 10800
+    21: 11900
+    22: 13100
+    23: 14400
+    24: 15800
+    25: 17400
+    26: 19100
+    27: 21000
+    28: 23100
+    29: 25400
+    30: 27900
+    31: 30700
+    32: 33800
+    33: 37200
+    34: 40900
+    35: 45000
+    36: 49500
+    37: 54500
+    38: 60000
+    39: 66000
+    40: 72600
+    41: 79900
+    42: 87900
+    43: 96700
+    44: 106400
+    45: 117000
+    46: 128700
+    47: 141600
+    48: 155800
+    49: 171400
+    50: 188500
 
 daily_xp_cap: 0
 
@@ -66,15 +84,31 @@ bossbar:
 
 level_rewards:
   5:
-    - "eco give {player} 250"
+    - "[console] eco give {player} 250"
   10:
-    - "eco give {player} 1000"
-    - "broadcast §e{player} §fpasse §eniveau 10 §fArtisan !"
+    - "[console] eco give {player} 1000"
+    - "[console] broadcast §e{player} §fpasse §eniveau 10 §fArtisan !"
   25:
-    - "eco give {player} 5000"
+    - "[console] eco give {player} 5000"
   50:
-    - "eco give {player} 25000"
-    - "broadcast §e{player} §fa atteint le §eniveau MAXIMUM §fdu job Artisan !"
+    - "[console] eco give {player} 25000"
+    - "[console] broadcast §e{player} §fa atteint le §eniveau MAXIMUM §fdu job Artisan !"
+
+# count_mode :
+#   CRAFTS       = une unite par execution de recette
+#   RESULT_ITEMS = une unite par item produit
+#
+# allow_forced :
+#   false = craft Kcraft force/admin ignore
+#   true  = craft force autorise explicitement
+#
+# Exemple :
+# "KCRAFT:pioche_azurite":
+#   xp: 120
+#   money: 10
+#   silktouch: false
+#   count_mode: CRAFTS
+#   allow_forced: false
 
 actions:
   WOOD:

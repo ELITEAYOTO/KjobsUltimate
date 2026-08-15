@@ -1,50 +1,29 @@
 # ============================================================
-# KjobsUltimate — Job : Hunter
+# KjobsUltimate V3.14.1 — Job : Hunter
 # ============================================================
 #
-# GUIDE DE CONFIGURATION D'UN JOB
-# ─────────────────────────────────────────────────────────────
-# Voir jobs/mineur.yml pour la documentation complète de tous les champs.
-# Recharger à chaud : /kjobs reload
+# Base propre :
+# - max_level = 50
+# - courbe XP explicite 1 -> 50, sans fallback partiel
+# - aucune compatibilite d'ancienne config
+# - XP / money / quete utilisent le meme accounting V3.13+
 #
-# NOTES SPÉCIFIQUES AU HUNTER
-# ─────────────────────────────────────────────────────────────
-# CLÉ D'ACTION = nom de l'EntityType Bukkit 1.8.8 EN MAJUSCULES.
-#   Le kill du mob déclenche EntityDeathEvent (entity.getKiller() = joueur).
-#   EntityTypes disponibles en 1.8.8 :
-#     Mobs hostiles  : ZOMBIE, SKELETON, SPIDER, CREEPER, ENDERMAN, BLAZE,
-#                      GHAST, WITCH, CAVE_SPIDER, WITHER_SKELETON, MAGMA_CUBE,
-#                      SLIME, SILVERFISH, GUARDIAN, PIG_ZOMBIE (ZombiePigman)
-#     Mobs passifs   : PIG, COW, SHEEP, CHICKEN, RABBIT, SQUID, BAT
-#     Mobs neutres   : WOLF, OCELOT, IRON_GOLEM, SNOWMAN, VILLAGER
-#     Bosses         : ENDER_DRAGON (XP élevé recommandé), WITHER
-#     Sous-types Zombie (via nom EntityType) : ZOMBIE (tous les types de zombie)
-#
-# INTÉGRATION KSTACKER
-#   Si Kstacker est actif et qu'une entité stackable meurt, Kstacker déclenche
-#   plusieurs EntityDeathEvent via des entités fantomes ("ghost").
-#   HunterListener détecte automatiquement le multiplicateur Kstacker via :
-#     entity.getMetadata("kstacker-ghost")      = entité fantome
-#     entity.getMetadata("kstacker-multiplier") = nombre de mobs dans le stack
-#   XP = xp_base × min(kstacker_multiplier, STACK_CAP)
-#   STACK_CAP = 3 (configurable dans HunterListener.java — évite l'abus de stacks géants).
-#
-# SILK TOUCH
-#   silktouch n'a aucun effet sur le Hunter (pas de tool check).
-#   Garder silktouch: false pour tous les mobs.
+# KStacker est pris en compte par HunterListener ; les actions restent par EntityType.
 
 display_name: "§cHunter"
 description: "§7Chasse les monstres et récolte leurs ressources."
+
 icon:
   material: BOW
   nbt_cit: "job_hunter_icon"
+
 max_level: 50
 
 xp_curve:
   type: custom
   fallback_type: linear
   fallback_base: 900
-  fallback_multiplier: 1.28
+  fallback_multiplier: 1.0
   custom_levels:
     1: 900
     2: 1400
@@ -56,6 +35,46 @@ xp_curve:
     8: 9200
     9: 12000
     10: 15500
+    11: 17000
+    12: 18700
+    13: 20600
+    14: 22700
+    15: 25000
+    16: 27500
+    17: 30300
+    18: 33300
+    19: 36600
+    20: 40300
+    21: 44300
+    22: 48700
+    23: 53600
+    24: 59000
+    25: 64900
+    26: 71400
+    27: 78500
+    28: 86400
+    29: 95000
+    30: 104500
+    31: 115000
+    32: 126500
+    33: 139200
+    34: 153100
+    35: 168400
+    36: 185200
+    37: 203700
+    38: 224100
+    39: 246500
+    40: 271200
+    41: 298300
+    42: 328100
+    43: 360900
+    44: 397000
+    45: 436700
+    46: 480400
+    47: 528400
+    48: 581200
+    49: 639300
+    50: 703200
 
 daily_xp_cap: 0
 
@@ -65,38 +84,16 @@ bossbar:
 
 level_rewards:
   5:
-    - "eco give {player} 400"
+    - "[console] eco give {player} 400"
   10:
-    - "eco give {player} 1500"
-    - "broadcast §c{player} §fpasse §cniveau 10 §fHunter !"
+    - "[console] eco give {player} 1500"
+    - "[console] broadcast §c{player} §fpasse §cniveau 10 §fHunter !"
   25:
-    - "eco give {player} 8000"
+    - "[console] eco give {player} 8000"
   50:
-    - "eco give {player} 40000"
-    - "broadcast §c{player} §fa atteint le §cniveau MAXIMUM §fdu job Hunter !"
+    - "[console] eco give {player} 40000"
+    - "[console] broadcast §c{player} §fa atteint le §cniveau MAXIMUM §fdu job Hunter !"
 
-# ─────────────────────────────────────────────────────────────
-# ACTIONS DU HUNTER : entités à tuer pour gagner XP + argent
-# ─────────────────────────────────────────────────────────────
-# Déclenché par EntityDeathEvent. Clé = EntityType Bukkit 1.8.8 EN MAJUSCULES.
-# Avec Kstacker actif : chaque entité fantome (ghost) déclenche son propre
-# EntityDeathEvent. Le killMultiplier Kstacker est pris en compte automatiquement.
-# XP = xp_base × min(kstacker_multiplier, 3) — cap à 3 par défaut (HunterListener).
-#
-# EntityTypes Bukkit 1.8.8 :
-#   Mobs hostiles  : ZOMBIE, SKELETON, SPIDER, CREEPER, ENDERMAN, BLAZE,
-#                    GHAST, WITCH, CAVE_SPIDER, WITHER_SKELETON, MAGMA_CUBE,
-#                    SLIME, SILVERFISH, GUARDIAN, PIG_ZOMBIE
-#   Mobs passifs   : PIG, COW, SHEEP, CHICKEN, RABBIT, SQUID, BAT
-#   Mobs neutres   : WOLF, OCELOT, IRON_GOLEM, SNOWMAN, VILLAGER
-#   Bosses         : ENDER_DRAGON, WITHER
-#
-# Conseils de équilibrage :
-#   - Mobs communs (ZOMBIE, SKELETON) : xp 10–30
-#   - Mobs dangereux (BLAZE, GHAST, GUARDIAN) : xp 40–70
-#   - Rares / difficiles (WITHER_SKELETON, ENDER_DRAGON) : xp 100–500
-#
-# silktouch: false pour TOUS les mobs (sans effet sur les entités).
 actions:
   ZOMBIE:
     xp: 15
