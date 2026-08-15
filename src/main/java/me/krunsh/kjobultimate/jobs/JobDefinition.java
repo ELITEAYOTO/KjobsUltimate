@@ -5,18 +5,21 @@ import org.bukkit.configuration.file.FileConfiguration;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Définition immuable d'un métier chargé depuis jobs/<jobId>.yml.
  *
- * V3.13 :
- * - une action de craft peut choisir son mode de comptage ;
- * - les crafts Kcraft peuvent être ciblés exactement via "KCRAFT:<craftId>" ;
- * - les crafts forcés sont refusés par défaut.
+ * V3.14 :
+ * - conserve l'accounting de craft V3.13 ;
+ * - pré-calcule l'XP restante jusqu'au niveau maximum ;
+ * - indexe les Materials qui possèdent une variante MATERIAL:data afin
+ *   d'éviter les concaténations inutiles sur chaque BlockBreakEvent.
  */
 public final class JobDefinition {
 
@@ -41,7 +44,16 @@ public final class JobDefinition {
      */
     private final Map<String, ActionReward> kcraftActions;
 
+    /** Materials possédant au moins une action MATERIAL:data. */
+    private final Set<String> dataSpecificActionMaterials;
+
     private final Map<Integer, List<String>> levelRewards;
+
+    /**
+     * XP totale restante depuis chaque niveau, avant retrait de l'XP déjà
+     * stockée dans le niveau courant. Calculée une seule fois au chargement.
+     */
+    private final long[] xpUntilMaxFromLevel;
 
     private final String fallbackType;
     private final int fallbackBase;
@@ -76,6 +88,10 @@ public final class JobDefinition {
         this.kcraftActions = Collections.unmodifiableMap(
             new LinkedHashMap<String, ActionReward>(kcraftActions));
 
+        this.dataSpecificActionMaterials =
+            Collections.unmodifiableSet(
+                findDataSpecificActionMaterials(actions));
+
         LinkedHashMap<Integer, List<String>> immutableRewards =
             new LinkedHashMap<Integer, List<String>>();
 
@@ -90,6 +106,7 @@ public final class JobDefinition {
         this.fallbackType = fallbackType;
         this.fallbackBase = fallbackBase;
         this.fallbackMultiplier = fallbackMultiplier;
+        this.xpUntilMaxFromLevel = buildXpUntilMaxTable();
     }
 
     public static JobDefinition fromConfig(String jobId, FileConfiguration cfg) {
@@ -305,6 +322,65 @@ public final class JobDefinition {
         return getXpRequiredToReachLevel(currentLevel + 1);
     }
 
+    /**
+     * O(1) : XP exacte restante avant le niveau maximum.
+     */
+    public long getXpUntilMax(
+            int currentLevel,
+            int currentXp) {
+
+        if (currentLevel < 0
+                || currentLevel >= maxLevel
+                || currentLevel >= xpUntilMaxFromLevel.length) {
+
+            return 0L;
+        }
+
+        long total =
+            xpUntilMaxFromLevel[currentLevel];
+
+        if (total <= 0L) {
+            return 0L;
+        }
+
+        return Math.max(
+            0L,
+            total - Math.max(0, currentXp));
+    }
+
+    private long[] buildXpUntilMaxTable() {
+
+        long[] table =
+            new long[Math.max(1, maxLevel + 1)];
+
+        long running = 0L;
+        boolean validTail = true;
+
+        for (int level = maxLevel - 1;
+                level >= 0;
+                level--) {
+
+            int required =
+                getXpRequiredForNextLevel(level);
+
+            if (required <= 0 || !validTail) {
+                validTail = false;
+                table[level] = 0L;
+                continue;
+            }
+
+            if (running > Long.MAX_VALUE - required) {
+                running = Long.MAX_VALUE;
+            } else {
+                running += required;
+            }
+
+            table[level] = running;
+        }
+
+        return table;
+    }
+
     private int calculateFallbackXp(int targetLevel) {
         double calculated;
 
@@ -349,6 +425,51 @@ public final class JobDefinition {
 
     public boolean hasAction(String actionKey) {
         return getAction(actionKey) != null;
+    }
+
+    /**
+     * Permet au Mineur de ne construire "MATERIAL:data" que si cette famille
+     * de bloc possède réellement une variante data dans le YAML.
+     */
+    public boolean hasDataSpecificActionFor(
+            String materialKey) {
+
+        return materialKey != null
+            && dataSpecificActionMaterials.contains(materialKey);
+    }
+
+    private static Set<String> findDataSpecificActionMaterials(
+            Map<String, ActionReward> actions) {
+
+        Set<String> materials =
+            new HashSet<String>();
+
+        for (String key : actions.keySet()) {
+            if (key == null) {
+                continue;
+            }
+
+            int separator = key.indexOf(':');
+            if (separator <= 0
+                    || separator >= key.length() - 1) {
+                continue;
+            }
+
+            boolean numeric = true;
+            for (int i = separator + 1; i < key.length(); i++) {
+                char c = key.charAt(i);
+                if (c < '0' || c > '9') {
+                    numeric = false;
+                    break;
+                }
+            }
+
+            if (numeric) {
+                materials.add(key.substring(0, separator));
+            }
+        }
+
+        return materials;
     }
 
     public List<String> getLevelRewardCommands(int level) {
@@ -478,7 +599,7 @@ public final class JobDefinition {
 
         /**
          * 1 unité = 1 exécution de la recette.
-         * Mode par défaut, rétrocompatible avec l'XP Artisan historique.
+         * Mode par défaut : une unité par exécution de recette.
          */
         CRAFTS,
 
@@ -503,16 +624,11 @@ public final class JobDefinition {
                     .replace('-', '_')
                     .replace(' ', '_');
 
-            if ("CRAFTS".equals(normalized)
-                    || "CRAFT".equals(normalized)) {
-
+            if ("CRAFTS".equals(normalized)) {
                 return CRAFTS;
             }
 
-            if ("RESULT_ITEMS".equals(normalized)
-                    || "ITEMS".equals(normalized)
-                    || "OUTPUT_ITEMS".equals(normalized)) {
-
+            if ("RESULT_ITEMS".equals(normalized)) {
                 return RESULT_ITEMS;
             }
 
@@ -531,23 +647,6 @@ public final class JobDefinition {
         private final boolean silkTouchBlocked;
         private final CountMode countMode;
         private final boolean allowForced;
-
-        /**
-         * Constructeur historique conservé pour compatibilité.
-         */
-        public ActionReward(
-                int xp,
-                double money,
-                boolean silkTouchBlocked) {
-
-            this(
-                xp,
-                money,
-                silkTouchBlocked,
-                CountMode.CRAFTS,
-                false
-            );
-        }
 
         public ActionReward(
                 int xp,

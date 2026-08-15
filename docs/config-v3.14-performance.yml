@@ -1,0 +1,26 @@
+# Bloc V3.14 à placer dans config.yml.
+# Le config.yml complet du patch le contient déjà.
+
+performance:
+  hot_path:
+
+    block_cooldowns:
+      max_entries_per_player: 4096
+      cleanup_every_checks: 128
+
+    xp:
+      # 100 ticks = 5 secondes.
+      # 0 = pas de cache permission.
+      permission_cache_ttl_ticks: 100
+      permission_cache_max_players: 2048
+
+      # Relecture du multiplicateur /kjobs event au maximum toutes les 1 s.
+      event_multiplier_refresh_ticks: 20
+
+      # Utilisé uniquement si le daily cap global est actif.
+      global_daily_sweep_interval_ticks: 200
+
+    ui_invalidation:
+      enabled: true
+      flush_interval_ticks: 1
+      max_players_per_flush: 250

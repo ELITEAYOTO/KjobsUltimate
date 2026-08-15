@@ -2,13 +2,10 @@
 # KjobsUltimate — Job : Farmer
 # ============================================================
 #
-# V3.13 IMPORTANT — Bukkit 1.8.8
+# Bukkit 1.8.8 :
 #   Le BLOC de blé est CROPS (ID 59).
-#   WHEAT est l'item récolté.
-#
-# Compatibilité :
-#   FarmerListener accepte encore une ancienne action WHEAT si CROPS n'est
-#   pas configuré, afin de ne pas casser les anciens serveurs.
+#   WHEAT reste uniquement le Material utilisé comme icône/item.
+#   Il n'existe plus d'alias d'action WHEAT dans la base V2 propre.
 #
 # Récoltes verticales :
 #   SUGAR_CANE_BLOCK et CACTUS peuvent compter plusieurs unités lorsque le

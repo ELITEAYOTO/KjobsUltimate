@@ -25,26 +25,46 @@ import me.krunsh.kjobultimate.integration.kgui.KjobsActions;
 import me.krunsh.kjobultimate.integration.kgui.KjobsContentProviders;
 import me.krunsh.kjobultimate.integration.kgui.KjobsRequirements;
 
-/** Extension Kgui V2 possédée et nettoyée par KjobsUltimate. */
+/**
+ * Extension Kgui V2 possédée et nettoyée par KjobsUltimate.
+ *
+ * V3.14 : la révision globale des ContentProviders peut être incrémentée une
+ * seule fois par batch d'invalidations, au lieu d'une fois par gain XP/quête.
+ */
 public final class KguiHook implements AutoCloseable {
 
-    public static final Set<String> PACK_MENUS = Collections.unmodifiableSet(
-            new LinkedHashSet<String>(Arrays.asList("kjobs_main", "kjobs_detail",
-                    "kjobs_quests", "kjobs_top", "kjobs_settings", "kjobs_confirm_leave")));
+    public static final Set<String> PACK_MENUS =
+        Collections.unmodifiableSet(
+            new LinkedHashSet<String>(
+                Arrays.asList(
+                    "kjobs_main",
+                    "kjobs_detail",
+                    "kjobs_quests",
+                    "kjobs_top",
+                    "kjobs_settings",
+                    "kjobs_confirm_leave")));
 
     private final KjobUltimate plugin;
     private final KguiApi api;
     private final KjobsContentProviders contentProviders;
-    private final List<OwnedRegistration> registrations = new ArrayList<OwnedRegistration>();
+    private final List<OwnedRegistration> registrations =
+        new ArrayList<OwnedRegistration>();
+
     private boolean closed;
 
     public KguiHook(KjobUltimate plugin) {
-        if (plugin == null) throw new IllegalArgumentException("plugin must not be null");
-        RegisteredServiceProvider<KguiApi> service = Bukkit.getServicesManager().getRegistration(KguiApi.class);
+        if (plugin == null) {
+            throw new IllegalArgumentException("plugin must not be null");
+        }
+
+        RegisteredServiceProvider<KguiApi> service =
+            Bukkit.getServicesManager().getRegistration(KguiApi.class);
         KguiApi resolved = service == null ? null : service.getProvider();
+
         if (resolved == null || resolved.getApiMajor() != 2) {
             throw new IllegalStateException("API Kgui majeure 2 indisponible");
         }
+
         this.plugin = plugin;
         this.api = resolved;
         this.contentProviders = new KjobsContentProviders(plugin, this);
@@ -53,7 +73,11 @@ public final class KguiHook implements AutoCloseable {
             contentProviders.register(api, registrations);
             new KjobsActions(plugin, this).register(api, registrations);
             new KjobsRequirements(plugin).register(api, registrations);
-            registrations.add(api.registerMenuPack(plugin, "kjobsultimate:volkaria", PACK_MENUS));
+            registrations.add(
+                api.registerMenuPack(
+                    plugin,
+                    "kjobsultimate:volkaria",
+                    PACK_MENUS));
         } catch (RuntimeException failure) {
             close();
             throw failure;
@@ -64,55 +88,147 @@ public final class KguiHook implements AutoCloseable {
         return contentProviders.getProviderCount();
     }
 
-    public boolean openMenu(Player player, String menuId, Map<String, String> arguments) {
-        if (closed || player == null || !player.isOnline() || menuId == null) return false;
-        Map<String, String> safe = arguments == null
+    public boolean openMenu(
+            Player player,
+            String menuId,
+            Map<String, String> arguments) {
+
+        if (closed
+                || player == null
+                || !player.isOnline()
+                || menuId == null) {
+            return false;
+        }
+
+        Map<String, String> safe =
+            arguments == null
                 ? Collections.<String, String>emptyMap()
                 : new LinkedHashMap<String, String>(arguments);
-        MenuOpenResult result = api.openMenu(new MenuOpenRequest(
-                player.getUniqueId(), menuId, 0, new MenuArguments(safe)));
+
+        MenuOpenResult result =
+            api.openMenu(
+                new MenuOpenRequest(
+                    player.getUniqueId(),
+                    menuId,
+                    0,
+                    new MenuArguments(safe)));
+
         return result == MenuOpenResult.OPENED;
     }
 
     public boolean openMenu(Player player, String menuId) {
-        return openMenu(player, menuId, Collections.<String, String>emptyMap());
+        return openMenu(
+            player,
+            menuId,
+            Collections.<String, String>emptyMap());
     }
 
-    public void invalidate(UUID playerId, String reason, String... menuIds) {
-        if (closed || playerId == null) return;
-        contentProviders.invalidateRevision();
-        if (menuIds == null || menuIds.length == 0) {
-            api.invalidate(InvalidationRequest.player(playerId, reason));
+    /**
+     * API historique conservée pour les invalidations rares/directes.
+     * Une seule révision est créée pour l'appel complet.
+     */
+    public void invalidate(
+            UUID playerId,
+            String reason,
+            String... menuIds) {
+
+        if (closed || playerId == null) {
             return;
         }
-        for (String menuId : menuIds) {
-            if (menuId == null || !PACK_MENUS.contains(menuId)) continue;
-            api.invalidate(InvalidationRequest.playerMenu(playerId, menuId,
-                    Collections.<String>emptySet(), reason));
+
+        beginInvalidationBatch();
+
+        if (menuIds == null || menuIds.length == 0) {
+            invalidatePlayerNoRevision(playerId, reason);
+            return;
         }
+
+        for (String menuId : menuIds) {
+            invalidatePlayerMenuNoRevision(playerId, menuId, reason);
+        }
+    }
+
+    /** Incrémente une seule fois l'epoch partagé des providers. */
+    public void beginInvalidationBatch() {
+        if (!closed) {
+            contentProviders.invalidateRevision();
+        }
+    }
+
+    /** Invalidation joueur sans nouvelle révision globale. */
+    public void invalidatePlayerNoRevision(
+            UUID playerId,
+            String reason) {
+
+        if (closed || playerId == null) {
+            return;
+        }
+
+        api.invalidate(
+            InvalidationRequest.player(
+                playerId,
+                safeReason(reason)));
+    }
+
+    /** Invalidation menu joueur sans nouvelle révision globale. */
+    public void invalidatePlayerMenuNoRevision(
+            UUID playerId,
+            String menuId,
+            String reason) {
+
+        if (closed
+                || playerId == null
+                || menuId == null
+                || !PACK_MENUS.contains(menuId)) {
+            return;
+        }
+
+        api.invalidate(
+            InvalidationRequest.playerMenu(
+                playerId,
+                menuId,
+                Collections.<String>emptySet(),
+                safeReason(reason)));
     }
 
     public void clearRankingCache(String reason) {
-        if (closed) return;
+        if (closed) {
+            return;
+        }
         contentProviders.clearRankingCache();
-        api.invalidate(InvalidationRequest.menu("kjobs_top", reason));
+        api.invalidate(
+            InvalidationRequest.menu(
+                "kjobs_top",
+                safeReason(reason)));
+    }
+
+    private static String safeReason(String reason) {
+        return reason == null || reason.trim().isEmpty()
+            ? "kjobs:dirty"
+            : reason;
     }
 
     @Override
     public void close() {
-        if (closed) return;
+        if (closed) {
+            return;
+        }
         closed = true;
         contentProviders.close();
+
         for (int index = registrations.size() - 1; index >= 0; index--) {
             try {
                 registrations.get(index).close();
             } catch (RuntimeException ignored) {
+                // best effort
             }
         }
         registrations.clear();
+
         try {
             api.unregisterAll(plugin);
         } catch (RuntimeException ignored) {
+            // best effort
         }
     }
 }

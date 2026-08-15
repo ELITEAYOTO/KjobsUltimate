@@ -19,8 +19,7 @@ import org.bukkit.event.block.BlockBreakEvent;
  *
  * Garanties :
  * - observe l'état final de BlockBreakEvent en MONITOR ;
- * - CROPS est la vraie identité du blé Bukkit 1.8 ;
- * - WHEAT reste accepté comme ancienne clé de config ;
+ * - CROPS est l'unique identité du blé Bukkit 1.8 ;
  * - canne à sucre / cactus : une casse peut créditer plusieurs unités ;
  * - XP, money et quête utilisent exactement la même quantité.
  */
@@ -28,9 +27,6 @@ public final class FarmerListener implements Listener {
 
     private static final String JOB_ID =
         "farmer";
-
-    private static final String LEGACY_GAMEMODE_BYPASS =
-        "kjob.bypass.gamemodecheck";
 
     private static final String GAMEMODE_BYPASS =
         "kjobsultimate.bypass.gamemodecheck";
@@ -134,9 +130,8 @@ public final class FarmerListener implements Listener {
                 .name();
 
         JobDefinition.ActionReward action =
-            resolveAction(
-                job,
-                block.getType()
+            job.getAction(
+                blockKey
             );
 
         if (action == null) {
@@ -153,14 +148,11 @@ public final class FarmerListener implements Listener {
             return;
         }
 
-        String locationKey =
-            createLocationKey(
-                block
-            );
-
-        if (data.isBlockOnCooldown(
-                locationKey
-            )) {
+        if (plugin.getBlockCooldownService()
+                .isOnCooldown(
+                    player,
+                    block
+                )) {
 
             return;
         }
@@ -182,43 +174,13 @@ public final class FarmerListener implements Listener {
          * aucun cooldown longue durée si le gain a été rejeté (ex. cap atteint).
          */
         if (applied) {
-            data.setBlockCooldown(
-                locationKey,
-                getBlockCooldownMillis()
-            );
+            plugin.getBlockCooldownService()
+                .mark(
+                    player,
+                    block,
+                    getBlockCooldownMillis()
+                );
         }
-    }
-
-    private JobDefinition.ActionReward resolveAction(
-            JobDefinition job,
-            Material blockType) {
-
-        if (job == null
-                || blockType == null) {
-
-            return null;
-        }
-
-        JobDefinition.ActionReward exact =
-            job.getAction(
-                blockType.name()
-            );
-
-        if (exact != null) {
-            return exact;
-        }
-
-        /*
-         * Compatibilité avec les anciens farmer.yml de KjobsUltimate :
-         * le bloc de blé 1.8 est CROPS mais l'ancienne config utilisait WHEAT.
-         */
-        if (blockType == Material.CROPS) {
-            return job.getAction(
-                "WHEAT"
-            );
-        }
-
-        return null;
     }
 
     private boolean isGameModeAllowed(
@@ -227,9 +189,6 @@ public final class FarmerListener implements Listener {
         boolean bypass =
             player.hasPermission(
                 GAMEMODE_BYPASS
-            )
-            || player.hasPermission(
-                LEGACY_GAMEMODE_BYPASS
             );
 
         if (player.getGameMode()
@@ -251,19 +210,6 @@ public final class FarmerListener implements Listener {
         }
 
         return true;
-    }
-
-    private String createLocationKey(
-            Block block) {
-
-        return block.getWorld()
-            .getName()
-            + ":"
-            + block.getX()
-            + ":"
-            + block.getY()
-            + ":"
-            + block.getZ();
     }
 
     private long getBlockCooldownMillis() {
