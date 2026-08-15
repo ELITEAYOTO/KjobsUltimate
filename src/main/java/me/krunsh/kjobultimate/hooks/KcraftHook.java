@@ -246,9 +246,8 @@ public final class KcraftHook implements Listener {
         }
 
         /*
-         * Compatibilité du comportement Pilleur existant :
-         * chaque dynamite produite reste une unité, indépendamment du nouveau
-         * count_mode Artisan.
+         * Pilleur compte les dynamites produites par item de résultat.
+         * Cette quantité unique est ensuite utilisée par JobActionService.
          */
         int units =
             Math.max(
@@ -277,12 +276,6 @@ public final class KcraftHook implements Listener {
                 plugin,
                 item,
                 "pilleur.dynamite_item"
-            )
-            || ConfiguredItemMatcher
-                .matches(
-                    plugin,
-                    item,
-                    "pilleur.dynamite_nbt_example"
-                );
+            );
     }
 }

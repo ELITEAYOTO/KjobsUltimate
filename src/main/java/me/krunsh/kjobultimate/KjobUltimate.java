@@ -13,6 +13,8 @@ import me.krunsh.kjobultimate.hud.HudManager;
 import me.krunsh.kjobultimate.jobs.JobRegistry;
 import me.krunsh.kjobultimate.jobs.XpManager;
 import me.krunsh.kjobultimate.listeners.PlayerConnectionListener;
+import me.krunsh.kjobultimate.performance.BlockCooldownService;
+import me.krunsh.kjobultimate.performance.UiInvalidationQueue;
 import me.krunsh.kjobultimate.quests.QuestManager;
 import me.krunsh.kjobultimate.slots.SlotManager;
 import me.krunsh.kjobultimate.util.KjobLogger;
@@ -23,11 +25,11 @@ import me.krunsh.kjobultimate.view.QuestViewService;
 /**
  * Point d'entrée de KjobsUltimate.
  *
- * V3.13 :
- * - Kgui V2 reste l'unique moteur GUI ;
- * - Ktab reste totalement séparé ;
- * - JobActionService centralise l'accounting XP / money / HUD / quêtes ;
- * - les listeners conservent uniquement la détection métier spécifique.
+ * V3.14 :
+ * - JobActionService reste le point unique d'accounting ;
+ * - BlockCooldownService sort les positions du PlayerData ;
+ * - UiInvalidationQueue fusionne les invalidations Kgui par tick ;
+ * - Ktab reste totalement séparé.
  */
 public final class KjobUltimate extends JavaPlugin {
 
@@ -43,6 +45,8 @@ public final class KjobUltimate extends JavaPlugin {
     private XpManager xpManager;
     private SlotManager slotManager;
     private JobActionService jobActionService;
+    private BlockCooldownService blockCooldownService;
+    private UiInvalidationQueue uiInvalidationQueue;
 
     private JobsViewService jobsViewService;
     private QuestViewService questViewService;
@@ -93,6 +97,9 @@ public final class KjobUltimate extends JavaPlugin {
 
             jobActionService =
                 new JobActionService(this);
+
+            blockCooldownService =
+                new BlockCooldownService(this);
 
             KjobLogger.success(
                 "Configs chargées — "
@@ -163,6 +170,11 @@ public final class KjobUltimate extends JavaPlugin {
 
             hookManager.setupAll();
 
+            uiInvalidationQueue =
+                new UiInvalidationQueue(this);
+
+            uiInvalidationQueue.start();
+
         } catch (RuntimeException failure) {
 
             KjobLogger.error(
@@ -202,12 +214,20 @@ public final class KjobUltimate extends JavaPlugin {
     @Override
     public void onDisable() {
 
+        if (uiInvalidationQueue != null) {
+            uiInvalidationQueue.shutdown();
+        }
+
         if (hookManager != null) {
             hookManager.close();
         }
 
         if (hudManager != null) {
             hudManager.shutdown();
+        }
+
+        if (blockCooldownService != null) {
+            blockCooldownService.clear();
         }
 
         clearViewCaches();
@@ -348,6 +368,14 @@ public final class KjobUltimate extends JavaPlugin {
         return jobActionService;
     }
 
+    public BlockCooldownService getBlockCooldownService() {
+        return blockCooldownService;
+    }
+
+    public UiInvalidationQueue getUiInvalidationQueue() {
+        return uiInvalidationQueue;
+    }
+
     public JobsViewService getJobsViewService() {
         return jobsViewService;
     }
@@ -370,6 +398,24 @@ public final class KjobUltimate extends JavaPlugin {
             String... menuIds) {
 
         invalidateViewCaches(playerId);
+
+        if (playerId == null) {
+            return;
+        }
+
+        UiInvalidationQueue queue =
+            uiInvalidationQueue;
+
+        if (queue != null
+                && queue.isEnabled()) {
+
+            queue.mark(
+                playerId,
+                reason,
+                menuIds
+            );
+            return;
+        }
 
         if (hookManager != null) {
             hookManager.invalidateKgui(

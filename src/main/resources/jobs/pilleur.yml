@@ -1,12 +1,6 @@
 # ============================================================
-# KjobsUltimate - Job : Pilleur
+# KjobsUltimate — Job : Pilleur
 # ============================================================
-# V1 preparation: les listeners TNT/dynamite seront ajoutes dans la prochaine phase.
-# Sources prevues:
-# - explosion de TNT posee par le joueur
-# - explosion de dynamite custom
-# - craft de TNT
-# - craft de dynamite custom via Kcraft
 
 display_name: "§5Pilleur"
 description: "§7Gagne de l'XP en pillant avec TNT et dynamite."
@@ -55,21 +49,23 @@ actions:
     xp: 12
     money: 0
     silktouch: false
-    limit_key: tnt_xp_limit
+
   DYNAMITE_EXPLODE:
     xp: 20
     money: 0
     silktouch: false
-    nbt:
-      sparrowmc-item: "dynamite"
+
+  # Les crafts Pilleur sont comptés par item réellement produit.
+  # Un shift-click de 16 TNT => 16 unités XP/quête/money.
   TNT_CRAFT:
     xp: 8
     money: 0
     silktouch: false
-    material: TNT
+    count_mode: RESULT_ITEMS
+
   DYNAMITE_CRAFT:
     xp: 15
     money: 0
     silktouch: false
-    nbt:
-      sparrowmc-item: "dynamite"
+    count_mode: RESULT_ITEMS
+    allow_forced: false

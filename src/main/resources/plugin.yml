@@ -4,20 +4,17 @@ main: me.krunsh.kjobultimate.KjobUltimate
 description: Systeme de jobs complet pour Volkaria
 author: krunsh
 
-# Kgui V2 est l'unique moteur GUI de KjobsUltimate V3.
+# Kgui V2 est l'unique moteur GUI.
 depend:
   - Kgui
 
+# Hooks réellement utilisés par la base V2.
 softdepend:
   - Vault
   - PlaceholderAPI
-  - HeadDatabase
   - Kcraft
   - KStacker
   - Kfaction
-  - Kenchantement
-  - WorldGuard
-  - CombatTagPlus
 
 commands:
   jobs:
@@ -29,7 +26,6 @@ commands:
   kjobs:
     description: Commandes staff KjobsUltimate
     usage: /kjobs <sous-commande>
-    aliases: [kjob, kjobadmin, kjobadm]
     permission: kjobsultimate.admin
 
 permissions:
@@ -73,35 +69,4 @@ permissions:
 
   kjobsultimate.xp.youtuber:
     description: Multiplicateur XP Youtuber x2.0
-    default: false
-
-  # Compat legacy pendant la refonte.
-  kjob.use:
-    description: Ancienne permission joueur
-    default: true
-    children:
-      kjobsultimate.use: true
-
-  kjob.admin:
-    description: Ancienne permission admin
-    default: op
-    children:
-      kjobsultimate.admin: true
-
-  kjob.bypass.gamemodecheck:
-    description: Ancienne permission bypass gamemode
-    default: false
-    children:
-      kjobsultimate.bypass.gamemodecheck: true
-
-  kjob.xp.vip:
-    description: Ancienne permission VIP
-    default: false
-
-  kjob.xp.premium:
-    description: Ancienne permission Premium
-    default: false
-
-  kjob.xp.youtuber:
-    description: Ancienne permission Youtuber
     default: false

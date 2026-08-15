@@ -1,21 +1,13 @@
 # ============================================================
-# KjobsUltimate — Configuration Principale
+# KjobsUltimate V3.14 — Configuration principale
+# Minecraft 1.8.8 / Java 8
 # ============================================================
 #
-# GUIDE RAPIDE
-# ─────────────────────────────────────────────────────────────
-# • Codes couleur : §0–§9, §a–§f | §l gras | §o italique | §r reset
-# • Recharger à chaud (sans restart) : /kjobs reload
-# • Fichier : plugins/KjobsUltimate/config.yml
-# ─────────────────────────────────────────────────────────────
+# Base V2/V3 propre : aucune clé legacy n'est nécessaire.
+# Rechargement : /kjobs reload
 
-# ─── Logs de débogage ───────────────────────────────────────
-# ACTIVER UNIQUEMENT EN DEV — peut flood la console en production.
-# debug       → events interceptés, chargements/sauvegardes, erreurs hooks
-# debug_xp    → chaque gain XP : joueur, job, valeur brute, multiplicateurs appliqués
-# debug_quest → chaque vérification de progression de quête
-# debug_hud   → chaque mise à jour de paquet bossbar / actionbar (NMS)
-# debug_slots → chaque déblocage de slot et vérification de seuil
+# ─── Debug ──────────────────────────────────────────────────
+# À laisser false hors diagnostic ciblé.
 debug: false
 debug_xp: false
 debug_quest: false
@@ -23,30 +15,17 @@ debug_hud: false
 debug_slots: false
 
 # ─── Stockage ───────────────────────────────────────────────
-# type             : type de stockage. Valeurs supportees : SQLITE ou MYSQL.
-#                    SQLITE est pratique en dev, MYSQL recommande en production.
-#
-# sqlite_file      : chemin relatif depuis le dossier du plugin.
-#                    Résultat : plugins/KjobsUltimate/data/KjobsUltimate.db
-#                    Le fichier et le répertoire sont créés automatiquement.
-#
-# autosave_interval: fréquence de sauvegarde automatique RAM → SQLite (minutes).
-#                    Les données sont AUSSI sauvegardées au disconnect du joueur.
-#                    Recommandé : 5 (<50 joueurs) | 10 (normal) | 15 (600+ joueurs)
-#                    Une valeur trop faible peut créer des pics de lag sur SQLite.
 storage:
   type: SQLITE
   sqlite_file: "data/KjobsUltimate.db"
   autosave_interval: 10
+
   sqlite:
-    # Attente maximale au lieu d'échouer immédiatement si SQLite est verrouillé.
     busy_timeout_ms: 5000
-    # Déclenche un checkpoint WAL automatique après ce nombre de pages.
     wal_autocheckpoint_pages: 1000
-    # Cache SQLite exprimé en Kio (le code applique PRAGMA cache_size négatif).
     cache_size_kib: 8000
-    # Empêche le WAL recyclé de conserver indéfiniment une taille excessive.
     journal_size_limit_bytes: 67108864
+
   mysql:
     host: "127.0.0.1"
     port: 3306
@@ -57,7 +36,6 @@ storage:
     connection_timeout_ms: 10000
     socket_timeout_ms: 30000
     extra_params: "useUnicode=true&characterEncoding=utf8&serverTimezone=UTC"
-    # Pool MySQL HikariCP. Pour 700 joueurs, ne pas surdimensionner: les operations DB sont courtes et async.
     pool:
       maximum_pool_size: 10
       minimum_idle: 2
@@ -66,183 +44,156 @@ storage:
       leak_detection_ms: 0
       connection_test_query: "SELECT 1"
 
-# ─── Comportement au premier join ───────────────────────────
-# default_all_jobs   : true  → tous les jobs assignés dès le premier connect.
-#                              Recommandé uniquement sur serveur créatif / mini-jeux.
-#                      false → le joueur doit choisir son premier job via /jobs.
-#                              Recommandé sur serveur survie/factions compétitif.
-#
-# first_join_message : message envoyé en chat privé lors du tout premier connect.
-#                      "" → désactivé. Supporte les codes couleur §.
-#                      Exemple : "§6§lBienvenue ! §7Choisis ton premier métier !"
+# ─── Premier join ───────────────────────────────────────────
 join:
   default_all_jobs: false
   first_join_message: "§6§lBienvenue ! §7Choisis ton premier métier dans le menu !"
 
-# ─── Système de Slots de Jobs ───────────────────────────────
-# Un "slot" = une place pour pratiquer un métier simultanément.
-# Le joueur commence avec default_slots slot(s) actif(s).
-# Des slots supplémentaires se débloquent automatiquement en progressant.
-#
-# enabled          : false → tous les jobs pratiquables en même temps (pas de limite).
-#                    true  → système de slots actif (recommandé en compétitif).
-#
-# default_slots    : slots disponibles dès le premier join. Recommandé : 1.
-#                    Doit être inférieur ou égal à max_slots.
-#
-# unlock_condition : critère vérifié pour atteindre les seuils de déblocage.
-#   MAIN_JOB_LEVEL    → niveau du job dans le slot 1 (job principal du joueur)
-#   HIGHEST_JOB_LEVEL → niveau le plus élevé parmi tous les jobs actifs du joueur
-#   TOTAL_LEVEL       → somme des niveaux de tous les jobs actifs du joueur
-#
-# unlock_thresholds : map [numéro_slot → niveau_requis_pour_débloquer]
-#   Exemple : "2: 5"  → le slot 2 se débloque quand la condition atteint niveau 5
-#   Exemple : "3: 15" → le slot 3 se débloque au niveau 15
-#   Exemple : "4: 30" → le slot 4 se débloque au niveau 30
-#   Exemple : "5: 50" → le slot 5 se débloque au niveau 50
-#   Le joueur reçoit la notification "slots.unlocked" (messages.yml) à chaque déblocage.
-#   Les niveaux doivent être croissants. Tous les slots jusqu'à max_slots doivent être listés.
-#
-# max_slots        : plafond absolu de slots (1–5).
-#                    Doit être ≥ au plus grand numéro dans unlock_thresholds.
-#
-# notify_unlock    : true  → envoie "slots.unlocked" (messages.yml) quand un slot se débloque.
-#                    false → silencieux.
-#
-# allow_job_change : false → un joueur ne peut JAMAIS changer de job une fois assigné.
-#                    true  → changement possible avec confirmation à 2 étapes.
-#                             Le joueur tape /jobs confirmer ou /jobs annuler.
-#                             La demande expire après 30 secondes.
-#
-# change_cooldown  : délai en secondes entre deux changements de job.
-#                    0       → pas de cooldown (illimité).
-#                    3600    → max 1 changement par heure.
-#                    86400   → max 1 changement par 24h.
-#                    604800  → max 1 changement par semaine.
+# ─── Slots de métiers ───────────────────────────────────────
 job_slots:
   enabled: true
   default_slots: 2
+
+  # TOTAL_LEVEL | HIGHEST_JOB_LEVEL | MAIN_JOB_LEVEL
   unlock_condition: TOTAL_LEVEL
+
   unlock_thresholds:
     3: 5
     4: 10
     5: 15
     6: 20
+
   max_slots: 6
   notify_unlock: true
   allow_job_change: true
+
+  # Secondes. 28800 = 8 h.
   change_cooldown: 28800
 
 # ─── Multiplicateurs XP ─────────────────────────────────────
-# Formule appliquée : xp_final = xp_base × max(multiplicateurs_permission) × event_multiplier
-#
-# permissions : map [permission.node → multiplicateur décimal]
-#   Seul LE PLUS ÉLEVÉ des multiplicateurs de permission du joueur est utilisé.
-#   Donner la permission via LuckPerms / PermissionsEx normalement.
-#   Exemples de nœuds et effets :
-#     kjobsultimate.xp.vip: 1.25        → +25% XP sur tous les jobs
-#     kjobsultimate.xp.premium: 1.5     → +50% XP sur tous les jobs
-#     kjobsultimate.xp.youtuber: 2.0    → XP doublé sur tous les jobs
-#     kjobsultimate.xp.staff: 0.0       → le staff ne gagne aucun XP (0 = désactivé)
-#     kjobsultimate.xp.champion: 3.0    → XP triplé (rang spécial ou event)
-#   Note : si un joueur a vip (×1.25) ET premium (×1.5), seul ×1.5 est appliqué.
-#
-# event_multiplier : multiplicateur global temporaire (tous joueurs, tous jobs).
-#   1.0 = normal | 1.5 = +50% XP | 2.0 = double XP event | 0.5 = demi-XP punitif
-#   Modifiable à chaud via /kjobadmin event <valeur> (sans /kjobs reload).
+# Formule :
+# XP = base × meilleur multiplicateur permission
+#           × event_multiplier
+#           × bonus joueur
 xp_multipliers:
   permissions:
     kjobsultimate.xp.vip: 1.25
     kjobsultimate.xp.premium: 1.5
     kjobsultimate.xp.youtuber: 2.0
+
+  # Modifiable à chaud avec /kjobs event <valeur>.
   event_multiplier: 1.0
 
 # ─── Anti-abuse ─────────────────────────────────────────────
-# silktouch_enabled     : true → blocs marqués "silktouch: true" dans jobs/*.yml
-#                                ne donnent PAS d'XP si le joueur utilise Silk Touch.
-#                                Empêche le farm de minerai sans le consommer.
-#                         false → Silk Touch ignoré (tous les cassages donnent XP).
-#
-# crops_mature_only     : true → le Farmer ne gagne XP que sur cultures à maturité COMPLÈTE.
-#                                Empêche la plantation + récolte immédiate en boucle.
-#                         false → XP accordé quelle que soit la maturité de la culture.
-#
-# block_position_cooldown : cooldown en secondes PAR COORDONNÉE DE BLOC après cassage.
-#                           Empêche le cassage + placement + cassage en boucle au même spot.
-#                           300  = 5 minutes de cooldown par position (recommandé en survie)
-#                           600  = 10 minutes (serveur plus strict)
-#                           0    = désactivé (déconseillé — expose au farm en boucle).
-#                           ⚠ Stocké en RAM uniquement — réinitialisé au restart serveur.
-#
-# pvp_target_cooldown   : délai en secondes entre deux kills PvP sur la MÊME victime.
-#                         Uniquement pour le job Prétorien (clé d'action = "pvp_kill").
-#                         60    = XP par kill d'une même cible max toutes les 60s
-#                         3600  = 1h entre chaque re-kill d'une même cible (recommandé)
-#                         0     = désactivé (farm XP PvP en boucle possible → DÉCONSEILLÉ).
-#                         ⚠ Stocké en RAM uniquement — réinitialisé au restart serveur.
-#
-# block_creative        : true → aucun XP accordé aux joueurs en mode créatif.
-#                         Permission de bypass : kjobsultimate.bypass.gamemodecheck
-#
-# block_spectator       : true → aucun XP accordé aux joueurs en mode spectateur.
-#                         Permission de bypass : kjobsultimate.bypass.gamemodecheck
-#
-# daily_xp_cap          : plafond d'XP global par tranche de 24h glissantes (tous jobs confondus).
-#   enabled : true  → plafond actif.
-#             false → pas de plafond global (chaque job peut avoir le sien dans jobs/*.yml).
-#   amount  : XP brut maximum par jour (AVANT application des multiplicateurs).
-#             5000  = un joueur ne peut accumuler que 5000 XP brut par jour.
-#             10000 = cap moins strict pour les serveurs grands.
-#   Note : chaque job peut définir son propre plafond via daily_xp_cap dans jobs/*.yml.
 anti_abuse:
   silktouch_enabled: true
   crops_mature_only: true
+
+  # Cooldown RAM par position de bloc, en secondes.
+  # Les positions sont stockées par BlockCooldownService V3.14 sous forme
+  # compacte et bornée, pas dans PlayerData.
   block_position_cooldown: 300
-  pvp_target_cooldown: 1200
+
+  block_creative: true
+  block_spectator: true
+
+  # Canne à sucre / cactus.
+  harvest:
+    # Empêche un plugin tiers de recompter un bloc supérieur déjà inclus dans
+    # la cascade. Protection très courte, indépendante du cooldown anti-farm.
+    cascade_guard_ticks: 3
+
+    vertical_crops:
+      SUGAR_CANE_BLOCK:
+        enabled: true
+        max_units_per_break: 16
+        max_scan: 16
+
+      CACTUS:
+        enabled: true
+        max_units_per_break: 16
+        max_scan: 16
+
   pvp:
-    # Dernier hit retenu pour attribuer un kill si la mort arrive apres chute/feu/etc.
+    # Dernier hit retenu pour une mort indirecte (chute, feu...).
     last_hit_seconds: 20
-    # Cooldown par couple killer -> victime. 1200 = 20 minutes.
+
+    # Cooldown killer -> même victime, en secondes.
     victim_cooldown_seconds: 1200
-    # Bloque l'XP Pretorien si Kfaction indique une relation non farmable.
+
     block_same_faction: true
     block_ally: true
     block_truce: true
-    # Anti double-compte simple. False par defaut pour eviter les faux positifs proxy/famille.
+
     same_ip_block:
       enabled: false
-    # Cap RAM de kills Pretorien donnant de l'XP. 80 par 24h par defaut.
+
     daily_kill_cap:
       enabled: true
       amount: 80
       window_seconds: 86400
-  block_creative: true
-  block_spectator: true
+
+  # Plafond global tous métiers confondus.
   daily_xp_cap:
     enabled: false
     amount: 5000
 
-# ─── Intégrations (Hooks) ───────────────────────────────────
-# vault
-#   enabled : true  → récompenses money des actions (jobs/*.yml) versées via Vault.
-#             false → aucune récompense économique (même si money > 0 dans les jobs).
-#             Requiert Vault installé + une économie active (EssentialsX, CMI, etc.).
-#
-# placeholderapi
-#   enabled : true  → enregistre les placeholders %kjob_*% pour d'autres plugins.
-#             false → aucun placeholder KjobsUltimate disponible en externe.
-#             Requiert PlaceholderAPI installé. Placeholders disponibles dans tab.yml.
-#
-#
-# kgui
-#   enabled : true  → menus /jobs affichés via l'API publique Kgui V2.
-#             false → le GUI interne Kjobs reste utilisé comme fallback.
-#
-# worldguard
-#   enabled             : true  → vérifie les régions WorldGuard avant d'accorder XP.
-#   require_build_flag  : true  → le flag BUILD doit être autorisé dans la région.
-#                                  Utile pour protéger les zones de ferme contre le XP farming.
-#                         false → seul le flag PVP est vérifié (Prétorien uniquement).
+# ============================================================
+# PERFORMANCE — V3.14 HOT PATH
+# ============================================================
+performance:
+  hot_path:
+
+    # --------------------------------------------------------
+    # Cooldowns de blocs
+    # --------------------------------------------------------
+    block_cooldowns:
+      # Limite RAM stricte PAR JOUEUR.
+      # 4096 couvre environ 6-7 minutes à 10 blocs/s tout en empêchant une
+      # croissance mémoire illimitée.
+      max_entries_per_player: 4096
+
+      # Un nettoyage des expirations est tenté après ce nombre de checks.
+      # Une entrée consultée après expiration est toujours supprimée tout de
+      # suite, indépendamment de ce compteur.
+      cleanup_every_checks: 128
+
+    # --------------------------------------------------------
+    # XP
+    # --------------------------------------------------------
+    xp:
+      # Cache du meilleur multiplicateur de permission d'un joueur.
+      # 100 ticks = 5 s. Un changement LuckPerms peut donc prendre au maximum
+      # environ 5 s à être reflété sans reconnect/reload.
+      # 0 = désactive ce cache.
+      permission_cache_ttl_ticks: 100
+
+      # Protection mémoire. 2048 laisse une marge confortable pour 700 joueurs.
+      permission_cache_max_players: 2048
+
+      # /kjobs event modifie le multiplicateur en RAM. XpManager relit cette
+      # valeur au maximum une fois par intervalle, pas à chaque bloc.
+      event_multiplier_refresh_ticks: 20
+
+      # Le job courant est vérifié à chaque gain. Le sweep de TOUS les métiers
+      # n'est nécessaire que si daily_xp_cap global est actif.
+      global_daily_sweep_interval_ticks: 200
+
+    # --------------------------------------------------------
+    # Kgui
+    # --------------------------------------------------------
+    ui_invalidation:
+      enabled: true
+
+      # 1 = fusionne toutes les mutations d'un même tick.
+      flush_interval_ticks: 1
+
+      # Budget de joueurs invalidés par flush. Avec 700 joueurs tous dirty en
+      # même temps, 250 répartit la charge sur environ 3 ticks.
+      max_players_per_flush: 250
+
+# ─── Hooks ──────────────────────────────────────────────────
+# Kgui V2 est obligatoire via plugin.yml / HookManager et n'a pas de toggle.
 hooks:
   kcraft:
     enabled: true
@@ -252,32 +203,25 @@ hooks:
     enabled: true
   placeholderapi:
     enabled: true
-  worldguard:
-    enabled: false
-    require_build_flag: false
 
-# Pilleur / TNT anti-abuse
+# ─── Pilleur / TNT ──────────────────────────────────────────
 pilleur:
   tnt_xp_limit:
     enabled: true
     amount: 128
     window_seconds: 28800
+
   dynamite_xp_limit:
     enabled: false
-  # Item custom reconnu comme dynamite.
-  # Le material peut etre remplace par SNOW_BALL, FIREBALL, TNT, etc.
-  # Mettre "*" pour accepter n'importe quel material tant que le NBT correspond.
+
+  # Le NBT sparrowmc-item est un contrat d'item existant volontairement gardé.
   dynamite_item:
     material: TNT
     data: -1
     nbt:
       sparrowmc-item: "dynamite"
 
-# Classements /jobs top
-# chat_limit    : nombre de lignes envoyees en chat par /jobs top. Max interne: 50.
-# gui_limit     : nombre de lignes chargees pour le GUI top. Max interne: 50.
-# cache_seconds : duree du cache RAM par filtre (global/job) pour eviter les requetes DB en spam.
-#                 0 = pas de cache.
+# ─── Classements ────────────────────────────────────────────
 top:
   chat_limit: 10
   gui_limit: 50

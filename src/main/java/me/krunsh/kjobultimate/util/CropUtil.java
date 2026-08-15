@@ -10,8 +10,7 @@ import org.bukkit.block.Block;
  * - le BLOC de blé est Material.CROPS (ID 59) ;
  * - Material.WHEAT représente l'item récolté.
  *
- * V3.13 garde WHEAT comme compatibilité défensive mais CROPS est désormais la
- * vraie clé de bloc utilisée par FarmerListener.
+ * V3.14 : seule la vraie identité de bloc CROPS est acceptée.
  */
 public final class CropUtil {
 
@@ -37,7 +36,6 @@ public final class CropUtil {
         switch (type) {
 
             case CROPS:
-            case WHEAT:
                 return data >= 7;
 
             case CARROT:
@@ -73,7 +71,6 @@ public final class CropUtil {
         switch (material) {
 
             case CROPS:
-            case WHEAT:
             case CARROT:
             case POTATO:
             case NETHER_WARTS:

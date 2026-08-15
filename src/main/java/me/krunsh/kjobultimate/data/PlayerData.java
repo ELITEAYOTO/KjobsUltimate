@@ -7,30 +7,33 @@ import java.util.UUID;
 /**
  * Modèle RAM d'un joueur connecté.
  *
- * V3.9 :
- * - les données métier restent la source de vérité en RAM ;
- * - viewRevision augmente lorsqu'une donnée pouvant modifier une View change ;
- * - les services de View peuvent ainsi réutiliser un snapshot tant que cette
- *   révision reste identique.
+ * V3.14 :
+ * - les cooldowns de blocs quittent PlayerData et passent dans
+ *   BlockCooldownService ;
+ * - aucun état de cooldown bloc n'est persistant ;
+ * - le sweep quotidien global possède un timestamp RAM pour ne pas rescanner
+ *   tous les métiers à chaque gain XP ;
+ * - les cooldowns PvP expirés sont supprimés opportunistement.
  */
 public final class PlayerData {
 
-    // ─── Identité ───────────────────────────────────────────
     private final UUID uuid;
     private long firstJoin;
     private long lastSeen;
 
-    // ─── Jobs : XP et niveaux ───────────────────────────────
-    private final Map<String, Integer> jobXP = new HashMap<String, Integer>();
-    private final Map<String, Integer> jobLevels = new HashMap<String, Integer>();
-    private final Map<String, Integer> dailyXP = new HashMap<String, Integer>();
-    private final Map<String, Long> dailyXpResetTime = new HashMap<String, Long>();
+    private final Map<String, Integer> jobXP =
+        new HashMap<String, Integer>();
+    private final Map<String, Integer> jobLevels =
+        new HashMap<String, Integer>();
+    private final Map<String, Integer> dailyXP =
+        new HashMap<String, Integer>();
+    private final Map<String, Long> dailyXpResetTime =
+        new HashMap<String, Long>();
 
-    // ─── Slots de jobs ──────────────────────────────────────
     private int unlockedSlots = 1;
-    private final Map<Integer, String> slotJobs = new HashMap<Integer, String>();
+    private final Map<Integer, String> slotJobs =
+        new HashMap<Integer, String>();
 
-    // ─── HUD ────────────────────────────────────────────────
     private String displayJob;
     private long lastXpTimestamp;
     private boolean hudEnabled = true;
@@ -39,32 +42,32 @@ public final class PlayerData {
 
     private long lastJobChangeAt;
 
-    // ─── Cooldowns RAM ──────────────────────────────────────
-    private final Map<String, Long> blockCooldowns = new HashMap<String, Long>();
-    private final Map<UUID, Long> pvpTargetCooldowns = new HashMap<UUID, Long>();
+    /* Cooldown PvP uniquement. Les blocs sont gérés par BlockCooldownService. */
+    private final Map<UUID, Long> pvpTargetCooldowns =
+        new HashMap<UUID, Long>();
 
-    // ─── Quêtes ─────────────────────────────────────────────
-    private final Map<String, QuestData> questProgress = new HashMap<String, QuestData>();
+    private final Map<String, QuestData> questProgress =
+        new HashMap<String, QuestData>();
 
-    // ─── Bonus multipliers ──────────────────────────────────
-    private final Map<String, Double> bonusMultipliers = new HashMap<String, Double>();
+    private final Map<String, Double> bonusMultipliers =
+        new HashMap<String, Double>();
 
-    // ─── Persistance / View revision ────────────────────────
-    private volatile boolean dirty = false;
+    private volatile boolean dirty;
+    private volatile long viewRevision;
 
     /**
-     * Révision monotone de l'état visible par JobsViewService /
-     * QuestViewService.
-     *
-     * Elle n'est pas persistée : elle sert uniquement au cache RAM.
+     * RAM uniquement. 0 = aucun sweep global encore effectué.
      */
-    private volatile long viewRevision = 0L;
+    private long lastGlobalDailySweepAt;
 
     public PlayerData(UUID uuid) {
+        if (uuid == null) {
+            throw new IllegalArgumentException(
+                "uuid ne peut pas être null."
+            );
+        }
         this.uuid = uuid;
     }
-
-    // ─── XP + Level ─────────────────────────────────────────
 
     public int getXP(String jobId) {
         Integer value = jobXP.get(jobId);
@@ -90,41 +93,82 @@ public final class PlayerData {
         return jobLevels.containsKey(jobId);
     }
 
-    // ─── Daily XP ───────────────────────────────────────────
-
     public int getDailyXP(String jobId) {
         Integer value = dailyXP.get(jobId);
         return value == null ? 0 : value.intValue();
     }
 
     public void addDailyXP(String jobId, int amount) {
-        Integer current = dailyXP.get(jobId);
         dailyXP.put(
             jobId,
             Integer.valueOf(
-                (current == null ? 0 : current.intValue()) + amount
+                saturatingAdd(
+                    getDailyXP(jobId),
+                    amount
+                )
             )
         );
         markViewDirty();
     }
 
-    public void resetDailyXP(String jobId) {
-        dailyXP.put(jobId, Integer.valueOf(0));
-        dailyXpResetTime.put(
+    /**
+     * Mutation groupée utilisée par le hot path XP normal.
+     *
+     * Daily XP + niveau + XP courante + job affiché ne provoquent qu'une seule
+     * révision de View au lieu de plusieurs mutations successives.
+     */
+    public void applyJobXpGain(
+            String jobId,
+            int level,
+            int remainingXp,
+            int dailyXpAmount,
+            long now) {
+
+        dailyXP.put(
             jobId,
-            Long.valueOf(System.currentTimeMillis())
+            Integer.valueOf(
+                saturatingAdd(
+                    getDailyXP(jobId),
+                    dailyXpAmount
+                )
+            )
         );
+
+        jobLevels.put(
+            jobId,
+            Integer.valueOf(
+                Math.max(0, level)
+            )
+        );
+
+        jobXP.put(
+            jobId,
+            Integer.valueOf(
+                Math.max(0, remainingXp)
+            )
+        );
+
+        displayJob = jobId;
+        lastXpTimestamp = now;
         markViewDirty();
     }
 
-    // ─── Slots ──────────────────────────────────────────────
+    public void resetDailyXP(String jobId) {
+        resetDailyXP(jobId, System.currentTimeMillis());
+    }
+
+    public void resetDailyXP(String jobId, long now) {
+        dailyXP.put(jobId, Integer.valueOf(0));
+        dailyXpResetTime.put(jobId, Long.valueOf(now));
+        markViewDirty();
+    }
 
     public int getUnlockedSlots() {
         return unlockedSlots;
     }
 
     public void setUnlockedSlots(int count) {
-        this.unlockedSlots = count;
+        unlockedSlots = count;
         markViewDirty();
     }
 
@@ -134,23 +178,23 @@ public final class PlayerData {
 
     public void setJobInSlot(int slot, String jobId) {
         Integer key = Integer.valueOf(slot);
-
         if (jobId == null) {
             slotJobs.remove(key);
         } else {
             slotJobs.put(key, jobId);
         }
-
         markViewDirty();
     }
 
     public int getSlotOfJob(String jobId) {
+        if (jobId == null) {
+            return -1;
+        }
         for (Map.Entry<Integer, String> entry : slotJobs.entrySet()) {
             if (jobId.equals(entry.getValue())) {
                 return entry.getKey().intValue();
             }
         }
-
         return -1;
     }
 
@@ -158,15 +202,13 @@ public final class PlayerData {
         return slotJobs;
     }
 
-    // ─── HUD ────────────────────────────────────────────────
-
     public String getDisplayJob() {
         return displayJob;
     }
 
     public void setDisplayJob(String jobId) {
-        this.displayJob = jobId;
-        this.lastXpTimestamp = System.currentTimeMillis();
+        displayJob = jobId;
+        lastXpTimestamp = System.currentTimeMillis();
         markViewDirty();
     }
 
@@ -188,7 +230,7 @@ public final class PlayerData {
     }
 
     public void setHudEnabled(boolean enabled) {
-        this.hudEnabled = enabled;
+        hudEnabled = enabled;
         dirty = true;
     }
 
@@ -197,7 +239,7 @@ public final class PlayerData {
     }
 
     public void setBossBarHudEnabled(boolean enabled) {
-        this.bossBarHudEnabled = enabled;
+        bossBarHudEnabled = enabled;
         dirty = true;
     }
 
@@ -206,37 +248,40 @@ public final class PlayerData {
     }
 
     public void setActionBarHudEnabled(boolean enabled) {
-        this.actionBarHudEnabled = enabled;
+        actionBarHudEnabled = enabled;
         dirty = true;
     }
 
-    // ─── Cooldowns RAM ──────────────────────────────────────
-
-    public boolean isBlockOnCooldown(String key) {
-        Long end = blockCooldowns.get(key);
-        return end != null && System.currentTimeMillis() < end.longValue();
-    }
-
-    public void setBlockCooldown(String key, long durationMs) {
-        blockCooldowns.put(
-            key,
-            Long.valueOf(System.currentTimeMillis() + durationMs)
-        );
-    }
-
     public boolean isPvpTargetOnCooldown(UUID target) {
+        if (target == null) {
+            return false;
+        }
+
         Long end = pvpTargetCooldowns.get(target);
-        return end != null && System.currentTimeMillis() < end.longValue();
+        if (end == null) {
+            return false;
+        }
+
+        if (System.currentTimeMillis() >= end.longValue()) {
+            pvpTargetCooldowns.remove(target);
+            return false;
+        }
+
+        return true;
     }
 
     public void setPvpTargetCooldown(UUID target, long durationMs) {
-        pvpTargetCooldowns.put(
-            target,
-            Long.valueOf(System.currentTimeMillis() + durationMs)
-        );
-    }
+        if (target == null || durationMs <= 0L) {
+            return;
+        }
 
-    // ─── Identité + persistance ─────────────────────────────
+        long now = System.currentTimeMillis();
+        long end = durationMs > Long.MAX_VALUE - now
+            ? Long.MAX_VALUE
+            : now + durationMs;
+
+        pvpTargetCooldowns.put(target, Long.valueOf(end));
+    }
 
     public UUID getUuid() {
         return uuid;
@@ -280,31 +325,35 @@ public final class PlayerData {
         return questProgress;
     }
 
-    // ─── Bonus Multipliers ──────────────────────────────────
-
     public double getBonusMultiplier(String jobId) {
         Double specificValue = bonusMultipliers.get(jobId);
         Double globalValue = bonusMultipliers.get("all");
 
-        double specific =
-            specificValue == null ? 1.0D : specificValue.doubleValue();
-
-        double global =
-            globalValue == null ? 1.0D : globalValue.doubleValue();
+        double specific = specificValue == null
+            ? 1D
+            : specificValue.doubleValue();
+        double global = globalValue == null
+            ? 1D
+            : globalValue.doubleValue();
 
         return Math.max(specific, global);
     }
 
     public void setBonusMultiplier(String jobId, double multiplier) {
-        bonusMultipliers.put(
-            jobId,
-            Double.valueOf(multiplier)
-        );
+        bonusMultipliers.put(jobId, Double.valueOf(multiplier));
         dirty = true;
     }
 
     public Map<String, Double> getBonusMultipliers() {
         return bonusMultipliers;
+    }
+
+    public long getLastGlobalDailySweepAt() {
+        return lastGlobalDailySweepAt;
+    }
+
+    public void setLastGlobalDailySweepAt(long value) {
+        lastGlobalDailySweepAt = value;
     }
 
     public boolean isDirty() {
@@ -315,19 +364,26 @@ public final class PlayerData {
         dirty = false;
     }
 
-    /**
-     * Utilisé notamment quand une structure mutable exposée par PlayerData
-     * (ex: questProgress) a été modifiée directement.
-     *
-     * Comme ce type de modification peut affecter les Views, on incrémente
-     * aussi viewRevision.
-     */
     public void markDirty() {
         markViewDirty();
     }
 
     public long getViewRevision() {
         return viewRevision;
+    }
+
+    private static int saturatingAdd(
+            int current,
+            int amount) {
+
+        long next =
+            (long) current + amount;
+
+        if (next >= Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+
+        return (int) Math.max(0L, next);
     }
 
     private void markViewDirty() {

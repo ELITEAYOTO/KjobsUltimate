@@ -100,33 +100,6 @@ public final class JobActionService {
             return false;
         }
 
-        /*
-         * Le plafond quotidien ne doit bloquer complètement l'action que si
-         * cette action attribue effectivement de l'XP.
-         */
-        if (reward.getXp() > 0) {
-
-            plugin.getXpManager()
-                .checkDailyReset(
-                    data,
-                    job.getId()
-                );
-
-            if (plugin.getXpManager()
-                    .isDailyCapReached(
-                        data,
-                        job.getId()
-                    )) {
-
-                sendDailyCapMessage(
-                    player,
-                    job
-                );
-
-                return false;
-            }
-        }
-
         int baseXp =
             saturatingMultiply(
                 Math.max(
@@ -144,6 +117,29 @@ public final class JobActionService {
                     job.getId(),
                     baseXp
                 );
+
+        /*
+         * V3.14 : on ne pré-vérifie plus deux fois le daily cap.
+         * XpManager reste la source de vérité. Si aucune XP n'a été attribuée,
+         * on ne fait un check supplémentaire que pour distinguer un cap atteint
+         * d'un niveau max / multiplicateur à 0.
+         */
+        if (reward.getXp() > 0
+                && result.getXpActual() <= 0
+                && !result.isAtMaxLevel()
+                && plugin.getXpManager()
+                    .isDailyCapReached(
+                        data,
+                        job.getId()
+                    )) {
+
+            sendDailyCapMessage(
+                player,
+                job
+            );
+
+            return false;
+        }
 
         depositMoney(
             player,
