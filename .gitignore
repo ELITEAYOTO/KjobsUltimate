@@ -1,23 +1,54 @@
-/target/
-/dependency-reduced-pom.xml
+# =========================
+# Maven / Java build
+# =========================
+target/
+dependency-reduced-pom.xml
+*.class
 
-# IDE and local tooling
-/.idea/
-/.vscode/
-/.settings/
-/.classpath
-/.project
+# =========================
+# IntelliJ IDEA
+# =========================
+.idea/
 *.iml
+*.ipr
+*.iws
 
-# Runtime and diagnostics
-/logs/
-/plugins/
+# =========================
+# VS Code
+# =========================
+.vscode/
+*.code-workspace
+
+# =========================
+# Eclipse
+# =========================
+.settings/
+.classpath
+.project
+
+# =========================
+# Runtime / server
+# =========================
+logs/
+plugins/
 *.log
 *.hprof
 hs_err_pid*
 replay_pid*
 
-# OS metadata
+# =========================
+# Temporary / backup files
+# =========================
+*.bak
+*.bak-*
+*.backup
+*.orig
+*.rej
+*.tmp
+*.temp
+
+# =========================
+# OS
+# =========================
 .DS_Store
 Thumbs.db
-
