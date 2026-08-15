@@ -588,25 +588,6 @@ public final class KjobAdminCommand
         }
 
         for (String line : lines) {
-
-            /*
-             * Compatibilité avec un ancien messages.yml déjà présent sur le
-             * serveur : on masque les anciennes commandes TAB sans obliger
-             * l'administrateur à supprimer son fichier de messages.
-             */
-            String lower =
-                line == null
-                    ? ""
-                    : line.toLowerCase();
-
-            if (lower.contains("tabdebug")
-                    || lower.contains("tabrender")
-                    || lower.contains("tabclear")
-                    || lower.contains("tabclearall")) {
-
-                continue;
-            }
-
             sender.sendMessage(
                 format(line)
             );

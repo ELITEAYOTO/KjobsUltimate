@@ -339,9 +339,10 @@ admin_command:
       - "&7MySQL pool: &f{pool_status}"
       - "&7Jobs: &f{jobs_loaded}/{jobs_expected} &8- &7{jobs}"
       - "&7Players cache: &f{cache_size}"
+      - "&7Views cache: &fjobs={jobs_view_cache} quests={quest_view_cache}"
       - "&7Hooks: &f{hooks}"
-      - "&7GUI: {gui_status} &8| &7HUD: {hud_status} &8| &7Tab: {tab_status}"
-      - "&7Tab virtuel: {virtual_tab_status}"
+      - "&7GUI: {gui_status} &8| &7HUD: {hud_status}"
+      - "&7TAB: &fexternalise vers Ktab"
       - "&7XP: event x{event_multiplier} &8| &7debug={debug} xp={debug_xp} hud={debug_hud}"
       - "&8----------------------------------------"
   help:
@@ -362,17 +363,5 @@ admin_command:
       - "&e/kjobs event &f<multiplicateur>"
       - "&e/kjobs bonus &f<joueur> <jobId|all> <multiplicateur>"
       - "&e/kjobs testhud &f[wither|dragon] [below|above|front|eye_front|player] [visible|invisible]"
-      - "&e/kjobs tabdebug &7[joueur] - diagnostic tab virtuel"
-      - "&e/kjobs tabrender &7[joueur] - preview lignes tab virtuel"
-      - "&e/kjobs tabclear &7[joueur] - retire les lignes fake du joueur"
       - "&8----------------------------------------"
       - "&7Aliases : /kjob /kjobadmin /kjobadm"
-  tabdebug:
-    no_tab: "{prefix}&cTabManager non initialise."
-  tabrender:
-    usage: "{prefix}&cUsage console: /kjobs tabrender <joueur>"
-  tabclear:
-    usage: "{prefix}&cUsage console: /kjobs tabclear <joueur>"
-    done: "{prefix}&aLignes fake du tab virtuel retirees pour &e{player}&a."
-  tabclearall:
-    done: "{prefix}&aToutes les lignes fake du tab virtuel ont ete retirees."
