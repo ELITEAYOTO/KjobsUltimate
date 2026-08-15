@@ -1,9 +1,12 @@
 package me.krunsh.kjobultimate;
 
+import java.util.UUID;
+
+import org.bukkit.plugin.java.JavaPlugin;
+
 import me.krunsh.kjobultimate.config.ConfigManager;
 import me.krunsh.kjobultimate.data.DatabaseManager;
 import me.krunsh.kjobultimate.data.PlayerDataManager;
-import me.krunsh.kjobultimate.gui.GuiManager;
 import me.krunsh.kjobultimate.hooks.HookManager;
 import me.krunsh.kjobultimate.hud.HudManager;
 import me.krunsh.kjobultimate.jobs.JobRegistry;
@@ -16,94 +19,111 @@ import me.krunsh.kjobultimate.util.KjobLogger;
 import me.krunsh.kjobultimate.validation.ConfigValidator;
 import me.krunsh.kjobultimate.view.JobsViewService;
 import me.krunsh.kjobultimate.view.QuestViewService;
-import org.bukkit.plugin.java.JavaPlugin;
-
-import java.util.UUID;
 
 /**
- * Point d'entrée du plugin KjobUltimate.
+ * Point d'entrée de KjobsUltimate.
  *
- * Ordre de démarrage strict :
- *   1. Logger
- *   2. Config + jobs + quêtes
- *   3. Storage SQLite/MySQL + couches View
- *   4. Hooks externes (Vault, PAPI, Kgui, Kcraft, Kstacker)
- *   5. Listeners + commandes
+ * Architecture V3 :
+ *  1. configuration / catalogues
+ *  2. stockage
+ *  3. couches View
+ *  4. intégrations externes
+ *  5. listeners / commandes
+ *  6. HUD / TAB historique
+ *
+ * Kgui V2 est désormais l'unique moteur GUI de KjobsUltimate.
  */
 public final class KjobUltimate extends JavaPlugin {
 
     private static KjobUltimate instance;
 
-    private ConfigManager     configManager;
-    private DatabaseManager   databaseManager;
+    private ConfigManager configManager;
+    private DatabaseManager databaseManager;
     private PlayerDataManager playerDataManager;
-    private JobRegistry       jobRegistry;
-    private XpManager         xpManager;
-    private SlotManager       slotManager;
-    private HookManager       hookManager;
-    private HudManager        hudManager;
-    private TabManager        tabManager;
-    private GuiManager        guiManager;
-    private QuestManager      questManager;
 
-    private JobsViewService   jobsViewService;
-    private QuestViewService  questViewService;
+    private JobRegistry jobRegistry;
+    private QuestManager questManager;
+
+    private XpManager xpManager;
+    private SlotManager slotManager;
+
+    private JobsViewService jobsViewService;
+    private QuestViewService questViewService;
+
+    private HookManager hookManager;
+
+    private HudManager hudManager;
+
+    /*
+     * Temporaire V3 :
+     * le TAB sera extrait plus tard dans Ktab.
+     */
+    private TabManager tabManager;
 
     @Override
     public void onEnable() {
+
         long start = System.currentTimeMillis();
         instance = this;
 
-        // 1. Logger
         KjobLogger.init(this);
         KjobLogger.printStartupBanner(
             getDescription().getVersion()
         );
 
-        // 2. Configs + jobs + quêtes
+        // ---------------------------------------------------------------------
+        // 1. CONFIGURATION / CATALOGUES
+        // ---------------------------------------------------------------------
+
         try {
-            configManager = new ConfigManager(this);
+
+            configManager =
+                new ConfigManager(this);
+
             configManager.loadAll();
 
-            jobRegistry = new JobRegistry(this);
+            jobRegistry =
+                new JobRegistry(this);
+
             jobRegistry.loadAll();
 
-            questManager = new QuestManager(this);
+            questManager =
+                new QuestManager(this);
+
             questManager.loadAll();
 
             new ConfigValidator(this)
                 .validateOrThrow();
 
-            xpManager = new XpManager(this);
-            slotManager = new SlotManager(this);
+            xpManager =
+                new XpManager(this);
 
-            /*
-             * GUI interne historique.
-             * Il sera supprimé lorsque la migration Kgui-only sera complète.
-             */
-            guiManager = new GuiManager(this);
-            guiManager.loadAll();
+            slotManager =
+                new SlotManager(this);
 
             KjobLogger.success(
                 "Configs chargées — "
                     + jobRegistry.getJobCount()
                     + " jobs"
             );
-        } catch (Exception e) {
+
+        } catch (Exception failure) {
+
             KjobLogger.error(
                 "Échec du chargement des configs",
-                e
+                failure
             );
 
-            getServer()
-                .getPluginManager()
-                .disablePlugin(this);
-
+            disableSelf();
             return;
         }
 
-        // 3. Storage SQLite/MySQL + couches View V3
+        // ---------------------------------------------------------------------
+        // 2. STORAGE + 3. COUCHES VIEW
+        // ---------------------------------------------------------------------
+
         try {
+
             databaseManager =
                 new DatabaseManager(this);
 
@@ -116,11 +136,8 @@ public final class KjobUltimate extends JavaPlugin {
                 );
 
             /*
-             * Sources de vérité communes pour les couches de présentation.
-             *
-             * Elles ne font aucune lecture SQL pendant le rendu : elles
-             * construisent des snapshots immuables depuis PlayerData déjà
-             * chargé en RAM.
+             * Sources de vérité communes utilisées par Kgui / PAPI.
+             * Elles travaillent depuis PlayerData déjà chargé en RAM.
              */
             jobsViewService =
                 new JobsViewService(this);
@@ -134,34 +151,60 @@ public final class KjobUltimate extends JavaPlugin {
                     + " connecte - "
                     + databaseManager.getDbPath()
             );
-        } catch (Exception e) {
+
+        } catch (Exception failure) {
+
             KjobLogger.error(
                 "Impossible d'initialiser le storage",
-                e
+                failure
             );
 
-            getServer()
-                .getPluginManager()
-                .disablePlugin(this);
-
+            disableSelf();
             return;
         }
 
-        // 4. Hooks externes
-        hookManager = new HookManager(this);
-        hookManager.setupAll();
+        // ---------------------------------------------------------------------
+        // 4. INTÉGRATIONS
+        // ---------------------------------------------------------------------
 
-        // 5. Listeners + commandes
+        try {
+
+            hookManager =
+                new HookManager(this);
+
+            hookManager.setupAll();
+
+        } catch (RuntimeException failure) {
+
+            KjobLogger.error(
+                "Impossible d'initialiser les intégrations obligatoires",
+                failure
+            );
+
+            disableSelf();
+            return;
+        }
+
+        // ---------------------------------------------------------------------
+        // 5. LISTENERS / COMMANDES
+        // ---------------------------------------------------------------------
+
         registerListeners();
         registerCommands();
 
-        // 6. HUD + TAB historique
-        hudManager = new HudManager(this);
-        tabManager = new TabManager(this);
+        // ---------------------------------------------------------------------
+        // 6. HUD / TAB HISTORIQUE
+        // ---------------------------------------------------------------------
+
+        hudManager =
+            new HudManager(this);
+
+        tabManager =
+            new TabManager(this);
 
         long elapsed =
-                System.currentTimeMillis()
-                    - start;
+            System.currentTimeMillis()
+                - start;
 
         KjobLogger.printLoadSummary(
             jobRegistry.getJobCount(),
@@ -186,6 +229,7 @@ public final class KjobUltimate extends JavaPlugin {
         }
 
         if (playerDataManager != null) {
+
             playerDataManager.cancelAutosave();
             playerDataManager.saveAll();
         }
@@ -199,6 +243,13 @@ public final class KjobUltimate extends JavaPlugin {
         );
     }
 
+    private void disableSelf() {
+
+        getServer()
+            .getPluginManager()
+            .disablePlugin(this);
+    }
+
     private void registerListeners() {
 
         getServer()
@@ -207,15 +258,6 @@ public final class KjobUltimate extends JavaPlugin {
                 new PlayerConnectionListener(this),
                 this
             );
-
-        if (guiManager != null) {
-            getServer()
-                .getPluginManager()
-                .registerEvents(
-                    guiManager,
-                    this
-                );
-        }
 
         getServer()
             .getPluginManager()
@@ -269,23 +311,23 @@ public final class KjobUltimate extends JavaPlugin {
 
     private void registerCommands() {
 
-        me.krunsh.kjobultimate.commands.KjobCommand jobCmd =
+        me.krunsh.kjobultimate.commands.KjobCommand jobCommand =
             new me.krunsh.kjobultimate.commands.KjobCommand(this);
 
         getCommand("jobs")
-            .setExecutor(jobCmd);
+            .setExecutor(jobCommand);
 
         getCommand("jobs")
-            .setTabCompleter(jobCmd);
+            .setTabCompleter(jobCommand);
 
-        me.krunsh.kjobultimate.commands.KjobAdminCommand adminCmd =
+        me.krunsh.kjobultimate.commands.KjobAdminCommand adminCommand =
             new me.krunsh.kjobultimate.commands.KjobAdminCommand(this);
 
         getCommand("kjobs")
-            .setExecutor(adminCmd);
+            .setExecutor(adminCommand);
 
         getCommand("kjobs")
-            .setTabCompleter(adminCmd);
+            .setTabCompleter(adminCommand);
     }
 
     public static KjobUltimate getInstance() {
@@ -308,8 +350,8 @@ public final class KjobUltimate extends JavaPlugin {
         return jobRegistry;
     }
 
-    public HookManager getHookManager() {
-        return hookManager;
+    public QuestManager getQuestManager() {
+        return questManager;
     }
 
     public XpManager getXpManager() {
@@ -320,22 +362,6 @@ public final class KjobUltimate extends JavaPlugin {
         return slotManager;
     }
 
-    public HudManager getHudManager() {
-        return hudManager;
-    }
-
-    public TabManager getTabManager() {
-        return tabManager;
-    }
-
-    public GuiManager getGuiManager() {
-        return guiManager;
-    }
-
-    public QuestManager getQuestManager() {
-        return questManager;
-    }
-
     public JobsViewService getJobsViewService() {
         return jobsViewService;
     }
@@ -344,8 +370,20 @@ public final class KjobUltimate extends JavaPlugin {
         return questViewService;
     }
 
+    public HookManager getHookManager() {
+        return hookManager;
+    }
+
+    public HudManager getHudManager() {
+        return hudManager;
+    }
+
+    public TabManager getTabManager() {
+        return tabManager;
+    }
+
     /**
-     * Point unique d'invalidation optionnelle, sans importer Kgui dans le métier.
+     * Point unique d'invalidation Kgui.
      */
     public void notifyJobsUiChanged(
             UUID playerId,
@@ -353,6 +391,7 @@ public final class KjobUltimate extends JavaPlugin {
             String... menuIds) {
 
         if (hookManager != null) {
+
             hookManager.invalidateKgui(
                 playerId,
                 reason,
