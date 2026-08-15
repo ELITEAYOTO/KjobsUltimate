@@ -286,13 +286,16 @@ public final class KjobAdminCommand implements CommandExecutor, TabCompleter {
             );
         }
 
-        String hooks = "Vault=" + yn(plugin.getHookManager() != null && plugin.getHookManager().isVaultEnabled())
+        String hooks = "Kgui=" + yn(plugin.getHookManager() != null && plugin.getHookManager().isKguiEnabled())
+            + ", Vault=" + yn(plugin.getHookManager() != null && plugin.getHookManager().isVaultEnabled())
             + ", PAPI=" + yn(plugin.getHookManager() != null && plugin.getHookManager().isPAPIEnabled())
             + ", Kcraft=" + yn(plugin.getHookManager() != null && plugin.getHookManager().isKcraftEnabled())
             + ", Kfaction=" + yn(plugin.getHookManager() != null && plugin.getHookManager().isKfactionEnabled())
             + ", KStacker=" + yn(plugin.getHookManager() != null && plugin.getHookManager().isKstackerEnabled());
 
-        String guiStatus = plugin.getGuiManager() != null && plugin.getGuiManager().isEnabled() ? "&aON" : "&cOFF";
+        String guiStatus = plugin.getHookManager() != null && plugin.getHookManager().isKguiEnabled()
+            ? "&aKgui V2 ON &7(providers=" + plugin.getHookManager().getRegisteredProviders() + ")"
+            : "&cKgui OFF";
         String hudStatus = plugin.getHudManager() != null
             ? "&aON &7(ab=" + yn(plugin.getHudManager().isActionBarEnabled())
                 + ", boss=" + yn(plugin.getHudManager().isBossBarEnabled())
@@ -486,7 +489,6 @@ public final class KjobAdminCommand implements CommandExecutor, TabCompleter {
             plugin.getJobRegistry().loadAll();
             if (plugin.getQuestManager() != null) plugin.getQuestManager().loadAll();
             new me.krunsh.kjobultimate.validation.ConfigValidator(plugin).validateOrThrow();
-            if (plugin.getGuiManager() != null) plugin.getGuiManager().loadAll();
             if (plugin.getHudManager() != null) plugin.getHudManager().reloadHudConfig();
             if (plugin.getTabManager() != null) plugin.getTabManager().reload();
             send(sender, "commands.reload_success", "{prefix}\u00A7aConfigs et jobs recharges.");

@@ -11,27 +11,169 @@ import java.util.stream.Stream;
 
 import org.junit.Test;
 
-/** Empêche le retour des casts vers les plugins principaux Kgui/Kfaction. */
+/**
+ * Garde-fous d'intégration avec les plugins publics.
+ *
+ * Kgui est une dépendance runtime obligatoire en V3, mais KjobsUltimate ne doit
+ * toujours compiler que contre son API publique.
+ */
 public class PublicApiBoundaryTest {
 
     @Test
-    public void optionalHooksUseOnlyPublishedApiPackages() throws Exception {
-        Path sourceRoot = Paths.get("src/main/java");
-        StringBuilder source = new StringBuilder();
-        try (Stream<Path> paths = Files.walk(sourceRoot)) {
-            paths.filter(path -> path.toString().endsWith(".java")).forEach(path -> {
-                try {
-                    source.append(new String(Files.readAllBytes(path), StandardCharsets.UTF_8));
-                } catch (java.io.IOException failure) {
-                    throw new IllegalStateException(failure);
-                }
-            });
+    public void hooksUseOnlyPublishedApiPackages()
+            throws Exception {
+
+        Path sourceRoot =
+            Paths.get("src/main/java");
+
+        StringBuilder source =
+            new StringBuilder();
+
+        try (Stream<Path> paths =
+                Files.walk(sourceRoot)) {
+
+            paths
+                .filter(
+                    path ->
+                        path.toString()
+                            .endsWith(".java")
+                )
+                .forEach(
+                    path -> {
+                        try {
+
+                            source.append(
+                                new String(
+                                    Files.readAllBytes(path),
+                                    StandardCharsets.UTF_8
+                                )
+                            );
+
+                        } catch (java.io.IOException failure) {
+
+                            throw new IllegalStateException(
+                                failure
+                            );
+                        }
+                    }
+                );
         }
 
-        String all = source.toString();
-        assertFalse(all.contains("import me.krunsh.kgui.Kgui"));
-        assertFalse(all.contains("import me.krunsh.kfaction.Kfaction"));
-        assertTrue(all.contains("import me.krunsh.kgui.api.KguiApi"));
-        assertTrue(all.contains("import me.krunsh.kfaction.api.v2.KfactionApis"));
+        String all =
+            source.toString();
+
+        assertFalse(
+            all.contains(
+                "import me.krunsh.kgui.Kgui"
+            )
+        );
+
+        assertFalse(
+            all.contains(
+                "import me.krunsh.kfaction.Kfaction"
+            )
+        );
+
+        assertTrue(
+            all.contains(
+                "import me.krunsh.kgui.api.KguiApi"
+            )
+        );
+
+        assertTrue(
+            all.contains(
+                "import me.krunsh.kfaction.api.v2.KfactionApis"
+            )
+        );
+    }
+
+    @Test
+    public void kguiIsARequiredRuntimeDependency()
+            throws Exception {
+
+        String yaml =
+            new String(
+                Files.readAllBytes(
+                    Paths.get(
+                        "src/main/resources/plugin.yml"
+                    )
+                ),
+                StandardCharsets.UTF_8
+            )
+            .replace(
+                "\r\n",
+                "\n"
+            );
+
+        assertTrue(
+            sectionContainsDependency(
+                yaml,
+                "depend",
+                "Kgui"
+            )
+        );
+
+        assertFalse(
+            sectionContainsDependency(
+                yaml,
+                "softdepend",
+                "Kgui"
+            )
+        );
+    }
+
+    private static boolean sectionContainsDependency(
+            String yaml,
+            String section,
+            String dependency) {
+
+        String[] lines =
+            yaml.split("\n");
+
+        boolean inside =
+            false;
+
+        for (String line : lines) {
+
+            if (line == null) {
+                continue;
+            }
+
+            if (!line.startsWith(" ")
+                    && line.endsWith(":")) {
+
+                inside =
+                    (section + ":")
+                        .equals(line.trim());
+
+                continue;
+            }
+
+            if (!inside) {
+                continue;
+            }
+
+            String trimmed =
+                line.trim();
+
+            if (trimmed.startsWith("- ")) {
+
+                if (dependency.equalsIgnoreCase(
+                        trimmed.substring(2).trim())) {
+
+                    return true;
+                }
+
+                continue;
+            }
+
+            if (!trimmed.isEmpty()
+                    && !line.startsWith(" ")) {
+
+                inside = false;
+            }
+        }
+
+        return false;
     }
 }
