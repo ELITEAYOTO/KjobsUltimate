@@ -52,29 +52,12 @@ permissions:
       kjobsultimate.admin.reward: true
       kjobsultimate.admin.backup: true
       kjobsultimate.admin.debug: true
-      kjobsultimate.staff: true
-      kjobsultimate.staff.modo: true
-      kjobsultimate.staff.helper: true
 
   kjobsultimate.admin.*:
     description: Toutes les permissions admin KjobsUltimate
     default: op
     children:
       kjobsultimate.admin: true
-
-  # Ces permissions restent temporairement ici jusqu'a l'extraction du TAB
-  # historique dans le futur plugin Ktab.
-  kjobsultimate.staff:
-    description: Affiche le joueur dans la section staff du tab KjobsUltimate
-    default: op
-
-  kjobsultimate.staff.modo:
-    description: Affiche le joueur dans le groupe modo du tab KjobsUltimate
-    default: op
-
-  kjobsultimate.staff.helper:
-    description: Affiche le joueur dans le groupe helper du tab KjobsUltimate
-    default: op
 
   kjobsultimate.bypass.gamemodecheck:
     description: Gagner XP en mode creatif/spectateur
