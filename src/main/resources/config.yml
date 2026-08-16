@@ -1,5 +1,5 @@
 # ============================================================
-# KjobsUltimate V3.14.1 — Configuration principale
+# KjobsUltimate V3.15 — Configuration principale
 # Minecraft 1.8.8 / Java 8
 # ============================================================
 #
@@ -191,6 +191,56 @@ performance:
       # Budget de joueurs invalidés par flush. Avec 700 joueurs tous dirty en
       # même temps, 250 répartit la charge sur environ 3 ticks.
       max_players_per_flush: 250
+
+
+  # ----------------------------------------------------------
+  # PERSISTANCE — V3.15
+  # ----------------------------------------------------------
+  persistence:
+
+    quest_buffer:
+      # true :
+      #   les progressions répétées sont fusionnées par joueur + quête avant
+      #   l'écriture SQL.
+      #
+      # false :
+      #   désactive uniquement le coalescing périodique. Les écritures restent
+      #   routées par la couche V3.15 et sont flushées immédiatement afin de
+      #   conserver les barrières de reset et la fiabilité transactionnelle.
+      enabled: true
+
+      # Flush normal toutes les 40 ticks = 2 secondes.
+      # La complétion d'une quête peut forcer un flush immédiat ci-dessous.
+      flush_interval_ticks: 40
+
+      # Nombre maximal de paires joueur/quête persistées par tâche async.
+      # Si le backlog dépasse cette valeur, le buffer enchaîne d'autres batches
+      # sans attendre le prochain intervalle.
+      max_batch_size: 500
+
+      # Une quête qui vient d'être terminée est poussée sans attendre le flush
+      # périodique. Recommandé pour limiter la fenêtre de perte sur crash brutal.
+      flush_on_completion: true
+
+      # Au quit, un flush prioritaire est demandé. PlayerDataManager effectue
+      # également sa sauvegarde complète : cette option accélère surtout la
+      # vidange du buffer.
+      flush_on_quit: true
+
+      # Une écriture SQL échouée est remise dans la file monotone.
+      retry_failed: true
+
+      # Si plus de max_batch_size entrées sont pending, enchaîne les lots tant
+      # que le précédent a réussi. Désactivé automatiquement en cas d'erreur
+      # pour éviter une boucle de retry agressive.
+      drain_backlog_immediately: true
+
+      # Anti-spam des logs DB en cas de panne.
+      failure_log_interval_ticks: 200
+
+      # Temps maximal attendu pendant l'arrêt serveur pour laisser finir un
+      # batch déjà en vol avant le flush final synchrone.
+      shutdown_wait_ms: 5000
 
 # ─── Hooks ──────────────────────────────────────────────────
 # Kgui V2 est obligatoire via plugin.yml / HookManager et n'a pas de toggle.

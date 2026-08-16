@@ -1,0 +1,31 @@
+# À fusionner sous `performance:` si vous n'utilisez pas le config.yml V3.15 complet.
+
+performance:
+  persistence:
+    quest_buffer:
+      enabled: true
+
+      # Flush normal : 40 ticks = 2 secondes.
+      flush_interval_ticks: 40
+
+      # Nombre maximum de paires joueur/quête par transaction.
+      max_batch_size: 500
+
+      # Les complétions sont prioritaires.
+      flush_on_completion: true
+
+      # Demande un flush prioritaire au quit.
+      # PlayerDataManager effectue de toute façon une save complète.
+      flush_on_quit: true
+
+      # Rollback transaction -> remettre le snapshot dans la queue.
+      retry_failed: true
+
+      # Si backlog > max_batch_size, enchaîner les transactions après succès.
+      drain_backlog_immediately: true
+
+      # 200 ticks = 10 secondes entre deux gros logs d'erreur DB.
+      failure_log_interval_ticks: 200
+
+      # Attente maximale d'un batch déjà en vol pendant l'arrêt.
+      shutdown_wait_ms: 5000

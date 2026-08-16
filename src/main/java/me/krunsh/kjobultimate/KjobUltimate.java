@@ -15,6 +15,7 @@ import me.krunsh.kjobultimate.jobs.XpManager;
 import me.krunsh.kjobultimate.listeners.PlayerConnectionListener;
 import me.krunsh.kjobultimate.performance.BlockCooldownService;
 import me.krunsh.kjobultimate.performance.UiInvalidationQueue;
+import me.krunsh.kjobultimate.persistence.QuestWriteBuffer;
 import me.krunsh.kjobultimate.quests.QuestManager;
 import me.krunsh.kjobultimate.slots.SlotManager;
 import me.krunsh.kjobultimate.util.KjobLogger;
@@ -25,10 +26,10 @@ import me.krunsh.kjobultimate.view.QuestViewService;
 /**
  * Point d'entrée de KjobsUltimate.
  *
- * V3.14 :
+ * V3.15 :
  * - JobActionService reste le point unique d'accounting ;
- * - BlockCooldownService sort les positions du PlayerData ;
- * - UiInvalidationQueue fusionne les invalidations Kgui par tick ;
+ * - les hot paths V3.14 restent actifs ;
+ * - QuestWriteBuffer fusionne les progressions avant persistance SQL ;
  * - Ktab reste totalement séparé.
  */
 public final class KjobUltimate extends JavaPlugin {
@@ -47,6 +48,7 @@ public final class KjobUltimate extends JavaPlugin {
     private JobActionService jobActionService;
     private BlockCooldownService blockCooldownService;
     private UiInvalidationQueue uiInvalidationQueue;
+    private QuestWriteBuffer questWriteBuffer;
 
     private JobsViewService jobsViewService;
     private QuestViewService questViewService;
@@ -128,6 +130,11 @@ public final class KjobUltimate extends JavaPlugin {
                 new DatabaseManager(this);
 
             databaseManager.initialize();
+
+            questWriteBuffer =
+                new QuestWriteBuffer(this);
+
+            questWriteBuffer.start();
 
             playerDataManager =
                 new PlayerDataManager(
@@ -234,6 +241,13 @@ public final class KjobUltimate extends JavaPlugin {
 
         if (playerDataManager != null) {
             playerDataManager.cancelAutosave();
+        }
+
+        if (questWriteBuffer != null) {
+            questWriteBuffer.shutdownAndFlush();
+        }
+
+        if (playerDataManager != null) {
             playerDataManager.saveAll();
         }
 
@@ -374,6 +388,10 @@ public final class KjobUltimate extends JavaPlugin {
 
     public UiInvalidationQueue getUiInvalidationQueue() {
         return uiInvalidationQueue;
+    }
+
+    public QuestWriteBuffer getQuestWriteBuffer() {
+        return questWriteBuffer;
     }
 
     public JobsViewService getJobsViewService() {

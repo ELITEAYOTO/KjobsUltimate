@@ -12,9 +12,8 @@ import me.krunsh.kjobultimate.util.KjobLogger;
 /**
  * Charge et expose les YAML de KjobsUltimate.
  *
- * V3.14 : les options consultées sur les chemins block/kill/XP sont copiées
- * dans un snapshot immuable au reload. Les listeners ne traversent donc plus
- * FileConfiguration à chaque événement.
+ * V3.15 : les options hot-path restent snapshotées et le QuestWriteBuffer
+ * recharge également ses réglages de persistance lors de /kjobs reload.
  */
 public final class ConfigManager {
 
@@ -58,10 +57,14 @@ public final class ConfigManager {
             plugin.getUiInvalidationQueue().reloadSettings();
         }
 
+        if (plugin.getQuestWriteBuffer() != null) {
+            plugin.getQuestWriteBuffer().reloadSettings();
+        }
+
         plugin.clearViewCaches();
 
         KjobLogger.info(
-            "Configs rechargees (main + messages + sounds + hud + runtime V3.14)");
+            "Configs rechargees (main + messages + sounds + hud + runtime V3.15)");
     }
 
     private FileConfiguration loadOrCreate(String fileName) {

@@ -3,6 +3,7 @@ package me.krunsh.kjobultimate.data;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import me.krunsh.kjobultimate.KjobUltimate;
+import me.krunsh.kjobultimate.persistence.QuestWriteSnapshot;
 import me.krunsh.kjobultimate.util.KjobLogger;
 
 import java.io.File;
@@ -19,7 +20,10 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Couche storage V1.
+ * Couche storage KjobsUltimate.
+ *
+ * V3.15 : les progressions de quetes peuvent etre persistees par lot dans
+ * une seule transaction/connexion afin de reduire fortement le cout I/O.
  *
  * SQLite garde une connexion unique protegee par verrou. MySQL utilise HikariCP:
  * chaque operation emprunte une connexion au pool puis la rend immediatement.
@@ -297,7 +301,6 @@ public final class DatabaseManager {
             releaseConnection(conn);
         }
     }
-
     private PlayerData loadPlayer0(Connection conn, UUID uuid) throws SQLException {
         String uuidStr = uuid.toString().replace("-", "");
         PlayerData data = new PlayerData(uuid);
@@ -475,6 +478,75 @@ public final class DatabaseManager {
         QuestProgressStore.saveMonotonic(conn,
                 storageType == StorageType.MYSQL, uuidStorage(uuid), questId,
                 progress, completed, claimed, completedAt);
+    }
+
+    /**
+     * Persiste un lot de snapshots monotones dans UNE transaction.
+     *
+     * SQLite : un seul verrou + une seule transaction pour tout le lot.
+     * MySQL  : une seule connexion Hikari + une seule transaction.
+     *
+     * Si une ecriture echoue, le lot entier est rollback afin que
+     * QuestWriteBuffer puisse requeue le batch sans etat partiellement connu.
+     */
+    public void saveQuestProgressBatch(
+            List<QuestWriteSnapshot> snapshots) throws SQLException {
+
+        if (snapshots == null || snapshots.isEmpty()) {
+            return;
+        }
+
+        if (storageType == StorageType.SQLITE) {
+            synchronized (sqliteLock) {
+                saveQuestProgressBatch0(
+                    sqliteConnection,
+                    snapshots
+                );
+            }
+            return;
+        }
+
+        Connection conn = borrowConnection();
+        try {
+            saveQuestProgressBatch0(
+                conn,
+                snapshots
+            );
+        } finally {
+            releaseConnection(conn);
+        }
+    }
+
+    private void saveQuestProgressBatch0(
+            Connection conn,
+            List<QuestWriteSnapshot> snapshots) throws SQLException {
+
+        boolean previousAutoCommit =
+            conn.getAutoCommit();
+
+        conn.setAutoCommit(false);
+
+        try {
+            QuestProgressBatchStore.save(
+                conn,
+                storageType == StorageType.MYSQL,
+                snapshots
+            );
+
+            conn.commit();
+
+        } catch (SQLException failure) {
+            try {
+                conn.rollback();
+            } catch (SQLException rollbackFailure) {
+                failure.addSuppressed(rollbackFailure);
+            }
+
+            throw failure;
+
+        } finally {
+            conn.setAutoCommit(previousAutoCommit);
+        }
     }
 
     /**
