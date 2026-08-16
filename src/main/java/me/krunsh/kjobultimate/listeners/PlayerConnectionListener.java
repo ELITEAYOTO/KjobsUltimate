@@ -15,7 +15,8 @@ import me.krunsh.kjobultimate.util.KjobLogger;
 /**
  * Chargement/déchargement des données joueur.
  *
- * V3.14 purge aussi tous les caches runtime non persistants au quit.
+ * V3.15 purge les caches runtime et demande un flush prioritaire du buffer
+ * de quêtes avant la sauvegarde complète de sortie.
  */
 public final class PlayerConnectionListener implements Listener {
 
@@ -154,6 +155,11 @@ public final class PlayerConnectionListener implements Listener {
         }
 
         plugin.invalidateViewCaches(player.getUniqueId());
+
+        if (plugin.getQuestWriteBuffer() != null) {
+            plugin.getQuestWriteBuffer()
+                .onPlayerQuit(player.getUniqueId());
+        }
 
         plugin.getPlayerDataManager()
             .saveAndUnload(player.getUniqueId());

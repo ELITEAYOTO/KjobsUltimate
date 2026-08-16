@@ -6,6 +6,7 @@ import me.krunsh.kjobultimate.data.QuestData;
 import me.krunsh.kjobultimate.data.QuestRewardClaimStore;
 import me.krunsh.kjobultimate.jobs.JobDefinition;
 import me.krunsh.kjobultimate.jobs.LevelUpResult;
+import me.krunsh.kjobultimate.persistence.QuestWriteBuffer;
 import me.krunsh.kjobultimate.util.KjobLogger;
 import org.bukkit.Bukkit;
 import org.bukkit.Sound;
@@ -29,10 +30,12 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Quetes V1 permanentes:
- * - pas de reset daily/weekly;
- * - progression sauvegardee en DB;
- * - recompense claimable une seule fois.
+ * Quêtes permanentes KjobsUltimate.
+ *
+ * V3.15 : les progressions ordinaires passent par QuestWriteBuffer afin
+ * de fusionner les écritures SQL. Les opérations non monotones (reset
+ * administratif) restent immédiates et utilisent une barrière contre les
+ * anciens batches en vol.
  */
 public final class QuestManager {
 
@@ -327,7 +330,7 @@ public final class QuestManager {
             boolean completedNow = questData.addProgress(amount, quest.getAmount());
             changed = true;
             data.markDirty();
-            saveQuestAsync(data.getUuid(), questData);
+            queueQuestSave(data.getUuid(), questData, false);
 
             if (plugin.getConfigManager().isDebugQuest()) {
                 KjobLogger.info("[Quest] " + player.getName() + " " + quest.getId()
@@ -517,7 +520,6 @@ public final class QuestManager {
             }
         }
     }
-
     private void finishReservedReward(final UUID uuid, final QuestDefinition quest,
                                       final int progress, final long completedAt,
                                       final String claimKey, final boolean success,
@@ -569,7 +571,7 @@ public final class QuestManager {
             questData.markClaimed();
             data.markDirty();
             plugin.notifyJobsUiChanged(uuid, "kjobs:quest-claim-locked", "kjobs_main", "kjobs_quests");
-            saveQuestAsync(uuid, questData);
+            queueQuestSave(uuid, questData, true);
         }
 
         Player player = Bukkit.getPlayer(uuid);
@@ -771,42 +773,139 @@ public final class QuestManager {
         }
     }
 
-    private void saveQuestAsync(final UUID uuid, final QuestData questData) {
+    /**
+     * Persistance ordinaire V3.15.
+     *
+     * Si le buffer est activé, aucun Runnable async n'est créé ici : la
+     * progression est simplement fusionnée en RAM. Si le coalescing est
+     * désactivé via config, QuestWriteBuffer reste la couche de sécurité et
+     * flush immédiatement au lieu de revenir à l'ancien modèle non suivi.
+     */
+    private void queueQuestSave(
+            final UUID uuid,
+            final QuestData questData,
+            boolean forceImmediate) {
+
+        if (uuid == null || questData == null) {
+            return;
+        }
+
+        QuestWriteBuffer buffer =
+            plugin.getQuestWriteBuffer();
+
+        if (buffer != null && buffer.isAvailable()) {
+            buffer.enqueue(
+                uuid,
+                questData,
+                forceImmediate
+            );
+            return;
+        }
+
         final String questId = questData.getQuestId();
         final int progress = questData.getProgress();
         final boolean completed = questData.isCompleted();
         final boolean claimed = questData.isClaimed();
         final long completedAt = questData.getCompletedAt();
+
         Bukkit.getScheduler().runTaskAsynchronously(plugin, new Runnable() {
             @Override
             public void run() {
                 try {
-                    plugin.getDatabaseManager().saveQuestProgress(uuid, questId,
-                        progress, completed, claimed, completedAt);
-                } catch (Exception e) {
-                    KjobLogger.error("Impossible de sauvegarder la quete " + questId + " pour " + uuid, e);
+                    plugin.getDatabaseManager().saveQuestProgress(
+                        uuid,
+                        questId,
+                        progress,
+                        completed,
+                        claimed,
+                        completedAt
+                    );
+                } catch (Exception failure) {
+                    KjobLogger.error(
+                        "Impossible de sauvegarder la quete "
+                            + questId
+                            + " pour "
+                            + uuid,
+                        failure
+                    );
                 }
             }
         });
     }
 
-    private void resetQuestStateAsync(final UUID uuid, final QuestData questData,
-                                      final String stateKey) {
+    private void resetQuestStateAsync(
+            final UUID uuid,
+            final QuestData questData,
+            final String stateKey) {
+
         final String questId = questData.getQuestId();
         final int progress = questData.getProgress();
         final boolean completed = questData.isCompleted();
         final long completedAt = questData.getCompletedAt();
+
+        final QuestWriteBuffer buffer =
+            plugin.getQuestWriteBuffer();
+
+        final boolean bufferedBarrier =
+            buffer != null
+                && buffer.isAvailable();
+
+        /*
+         * Le reset est non monotone : une ancienne progression buffered ne doit
+         * jamais pouvoir réapparaître après le reset.
+         */
+        if (bufferedBarrier) {
+            buffer.beginExclusive(
+                uuid,
+                questId
+            );
+        }
+
         Bukkit.getScheduler().runTaskAsynchronously(plugin, new Runnable() {
             @Override
             public void run() {
                 try {
+                    if (bufferedBarrier) {
+                        boolean idle =
+                            buffer.awaitIdle(
+                                10000L
+                            );
+
+                        if (!idle) {
+                            throw new IllegalStateException(
+                                "QuestWriteBuffer non idle après 10s ; reset annulé."
+                            );
+                        }
+                    }
+
                     plugin.getDatabaseManager().resetQuestState(
-                        uuid, questId, progress, completed, completedAt);
-                } catch (Exception e) {
-                    KjobLogger.error("Impossible de reinitialiser la quete "
-                        + questId + " pour " + uuid, e);
+                        uuid,
+                        questId,
+                        progress,
+                        completed,
+                        completedAt
+                    );
+
+                } catch (Exception failure) {
+                    KjobLogger.error(
+                        "Impossible de reinitialiser la quete "
+                            + questId
+                            + " pour "
+                            + uuid,
+                        failure
+                    );
+
                 } finally {
-                    rewardClaimsInFlight.remove(stateKey);
+                    if (bufferedBarrier) {
+                        buffer.endExclusive(
+                            uuid,
+                            questId
+                        );
+                    }
+
+                    rewardClaimsInFlight.remove(
+                        stateKey
+                    );
                 }
             }
         });
