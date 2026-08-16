@@ -5,6 +5,8 @@ import java.util.UUID;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import me.krunsh.kjobultimate.action.JobActionService;
+import me.krunsh.kjobultimate.commands.KjobAdminCommand;
+import me.krunsh.kjobultimate.commands.KjobAdminRouter;
 import me.krunsh.kjobultimate.config.ConfigManager;
 import me.krunsh.kjobultimate.data.DatabaseManager;
 import me.krunsh.kjobultimate.data.PlayerDataManager;
@@ -26,11 +28,11 @@ import me.krunsh.kjobultimate.view.QuestViewService;
 /**
  * Point d'entrée de KjobsUltimate.
  *
- * V3.15 :
- * - JobActionService reste le point unique d'accounting ;
- * - les hot paths V3.14 restent actifs ;
- * - QuestWriteBuffer fusionne les progressions avant persistance SQL ;
- * - Ktab reste totalement séparé.
+ * V3.16 :
+ * - accounting central V3.13 ;
+ * - hot paths V3.14 ;
+ * - persistence buffer V3.15 ;
+ * - HUD NMS cache + active-only scheduler + /kjobs perf.
  */
 public final class KjobUltimate extends JavaPlugin {
 
@@ -59,7 +61,9 @@ public final class KjobUltimate extends JavaPlugin {
     @Override
     public void onEnable() {
 
-        long start = System.currentTimeMillis();
+        long start =
+            System.currentTimeMillis();
+
         instance = this;
 
         KjobLogger.init(this);
@@ -67,12 +71,7 @@ public final class KjobUltimate extends JavaPlugin {
             getDescription().getVersion()
         );
 
-        // ---------------------------------------------------------------------
-        // 1. CONFIGURATION / CATALOGUES
-        // ---------------------------------------------------------------------
-
         try {
-
             configManager =
                 new ConfigManager(this);
 
@@ -110,7 +109,6 @@ public final class KjobUltimate extends JavaPlugin {
             );
 
         } catch (Exception failure) {
-
             KjobLogger.error(
                 "Échec du chargement des configs",
                 failure
@@ -120,12 +118,7 @@ public final class KjobUltimate extends JavaPlugin {
             return;
         }
 
-        // ---------------------------------------------------------------------
-        // 2. STORAGE + 3. VIEWS
-        // ---------------------------------------------------------------------
-
         try {
-
             databaseManager =
                 new DatabaseManager(this);
 
@@ -156,7 +149,6 @@ public final class KjobUltimate extends JavaPlugin {
             );
 
         } catch (Exception failure) {
-
             KjobLogger.error(
                 "Impossible d'initialiser le storage",
                 failure
@@ -166,12 +158,7 @@ public final class KjobUltimate extends JavaPlugin {
             return;
         }
 
-        // ---------------------------------------------------------------------
-        // 4. INTÉGRATIONS
-        // ---------------------------------------------------------------------
-
         try {
-
             hookManager =
                 new HookManager(this);
 
@@ -183,7 +170,6 @@ public final class KjobUltimate extends JavaPlugin {
             uiInvalidationQueue.start();
 
         } catch (RuntimeException failure) {
-
             KjobLogger.error(
                 "Impossible d'initialiser les intégrations obligatoires",
                 failure
@@ -193,19 +179,15 @@ public final class KjobUltimate extends JavaPlugin {
             return;
         }
 
-        // ---------------------------------------------------------------------
-        // 5. LISTENERS / COMMANDES
-        // ---------------------------------------------------------------------
+        /*
+         * HUD avant les commandes : /kjobs perf est ainsi initialise avec
+         * tous les services disponibles.
+         */
+        hudManager =
+            new HudManager(this);
 
         registerListeners();
         registerCommands();
-
-        // ---------------------------------------------------------------------
-        // 6. HUD
-        // ---------------------------------------------------------------------
-
-        hudManager =
-            new HudManager(this);
 
         long elapsed =
             System.currentTimeMillis()
@@ -336,14 +318,20 @@ public final class KjobUltimate extends JavaPlugin {
         getCommand("jobs")
             .setTabCompleter(jobCommand);
 
-        me.krunsh.kjobultimate.commands.KjobAdminCommand adminCommand =
-            new me.krunsh.kjobultimate.commands.KjobAdminCommand(this);
+        KjobAdminCommand adminCommand =
+            new KjobAdminCommand(this);
+
+        KjobAdminRouter adminRouter =
+            new KjobAdminRouter(
+                this,
+                adminCommand
+            );
 
         getCommand("kjobs")
-            .setExecutor(adminCommand);
+            .setExecutor(adminRouter);
 
         getCommand("kjobs")
-            .setTabCompleter(adminCommand);
+            .setTabCompleter(adminRouter);
     }
 
     public static KjobUltimate getInstance() {

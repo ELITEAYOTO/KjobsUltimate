@@ -1,44 +1,40 @@
 package me.krunsh.kjobultimate.hud;
 
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.bukkit.Achievement;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Vector;
+
 import me.krunsh.kjobultimate.KjobUltimate;
 import me.krunsh.kjobultimate.data.PlayerData;
 import me.krunsh.kjobultimate.jobs.JobDefinition;
 import me.krunsh.kjobultimate.jobs.LevelUpResult;
 import me.krunsh.kjobultimate.util.KjobLogger;
 import me.krunsh.kjobultimate.util.LevelUtil;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitTask;
-import org.bukkit.util.Vector;
-
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Gère le HUD en jeu :
- * - actionbar d'XP accumulée ;
- * - bossbar de progression ;
- * - popup de passage de niveau.
+ * HUD V3.16.2.
  *
- * Toutes les opérations NMS restent isolées dans cette classe et sont faites
- * par réflexion pour éviter de lier directement le projet aux classes NMS.
+ * Performance :
+ * - NMS/reflexion mis en cache dans HudNmsAdapter ;
+ * - scheduler limite aux joueurs avec un affichage actuellement actif ;
+ * - ActionBar rafraichie a faible frequence au lieu de 10 fois/seconde ;
+ * - BossBar conserve son intervalle configurable.
  *
- * Convention XP :
- * - PlayerData stocke le niveau actuel ;
- * - JobDefinition#getXpRequiredForNextLevel(int) fournit le palier suivant ;
- * - LevelUtil centralise les valeurs et pourcentages affichés.
- *
- * Cycle de vie :
- * - onXpGain() est appelé après un gain d'XP réellement appliqué ;
- * - onLevelUp() est appelé par XpManager.handleLevelUp() ;
- * - removePlayer() est appelé à la déconnexion ;
- * - shutdown() est appelé lors de l'arrêt du plugin.
+ * Wither 1.8 :
+ * le client continue de produire des particules meme si le faux Wither est
+ * invisible. En mode particle-safe, le HUD normal place donc le faux Wither
+ * sous le joueur. /kjobs testhud respecte la position demandee et reste un
+ * vrai diagnostic.
  */
 public final class HudManager {
 
@@ -46,21 +42,28 @@ public final class HudManager {
         new AtomicInteger(800_000);
 
     private final KjobUltimate plugin;
-
-    /** Version NMS détectée au démarrage, par exemple v1_8_R3. */
-    private final String NMS;
+    private final HudNmsAdapter nmsAdapter;
 
     private final Map<UUID, PlayerHudState> states =
         new ConcurrentHashMap<UUID, PlayerHudState>();
 
+    private final ConcurrentHashMap<UUID, Boolean> active =
+        new ConcurrentHashMap<UUID, Boolean>();
+
     private BukkitTask updateTask;
 
-    // Valeurs de configuration mises en cache.
+    // BossBar.
     private boolean bossEnabled;
     private long bossResetMs;
     private long bossUpdateMs;
     private double bossOffsetY;
     private double bossForwardOffset;
+    private double bossFrontFarDistance;
+    private double bossAutoDistance;
+    private double bossAutoVerticalOffset;
+    private double bossArmoredDistance;
+    private double bossArmoredVerticalOffset;
+    private double bossArmoredThreshold;
     private String bossPositionMode;
     private boolean bossFollowPlayer;
     private boolean bossInvisibleEntity;
@@ -68,33 +71,59 @@ public final class HudManager {
     private String bossEntityType;
     private float bossEntityMaxHealth;
     private long bossTestDurationMs;
+    private String bossTitleFormat;
+    private String bossTitleFormatMax;
 
+    // Correctif visuel Wither.
+    private boolean hideWitherParticles;
+
+    // ActionBar.
     private boolean abEnabled;
     private String abFormat;
     private long abDisplayMs;
-    private long hudWindowMs;
+    private long abAccumulationWindowMs;
+    private long abRefreshMs;
+
+    // Scheduler.
+    private int schedulerIntervalTicks;
+
+    // Metriques.
+    private final AtomicLong xpSignals = new AtomicLong();
+    private final AtomicLong levelPopupSignals = new AtomicLong();
+    private final AtomicLong schedulerTicks = new AtomicLong();
+    private final AtomicLong schedulerPlayerVisits = new AtomicLong();
+    private final AtomicLong schedulerTotalNanos = new AtomicLong();
+    private final AtomicLong schedulerMaxNanos = new AtomicLong();
+    private final AtomicLong bossParticleSafePlacements = new AtomicLong();
 
     public HudManager(KjobUltimate plugin) {
-        this.plugin = Objects.requireNonNull(
-            plugin,
-            "KjobUltimate ne peut pas être null.");
+        if (plugin == null) {
+            throw new IllegalArgumentException(
+                "plugin ne peut pas etre null."
+            );
+        }
 
-        String pkg =
-            Bukkit.getServer().getClass().getPackage().getName();
-
-        this.NMS =
-            pkg.substring(pkg.lastIndexOf('.') + 1);
+        this.plugin = plugin;
+        this.nmsAdapter =
+            new HudNmsAdapter(plugin);
 
         reloadHudConfig();
         startUpdateTask();
 
         KjobLogger.success(
-            "HudManager actif (" + NMS
-                + ") - actionbar + bossbar + level-up popup.");
+            "HudManager V3.16.2 actif ("
+                + nmsAdapter.getNms()
+                + ") - NMS cache="
+                + (nmsAdapter.isAvailable() ? "ON" : "OFF")
+                + ", active-only=ON"
+                + ", wither-particles="
+                + (hideWitherParticles ? "SAFE" : "LEGACY")
+                + "."
+        );
     }
 
     public String getNMS() {
-        return NMS;
+        return nmsAdapter.getNms();
     }
 
     public boolean isActionBarEnabled() {
@@ -113,174 +142,250 @@ public final class HudManager {
         return states.size();
     }
 
-    /**
-     * Envoie directement une bossbar de test à 75 %.
-     */
-    public void testBossBar(Player player) {
-        testBossBar(player, null, null, null);
+    public int getActivePlayers() {
+        return active.size();
+    }
+
+    public boolean isNmsCacheReady() {
+        return nmsAdapter.isAvailable();
+    }
+
+    public long getXpSignals() {
+        return xpSignals.get();
+    }
+
+    public long getLevelPopupSignals() {
+        return levelPopupSignals.get();
+    }
+
+    public long getSchedulerTicks() {
+        return schedulerTicks.get();
+    }
+
+    public long getSchedulerPlayerVisits() {
+        return schedulerPlayerVisits.get();
+    }
+
+    public double getAverageTickMillis() {
+        long ticks = schedulerTicks.get();
+
+        if (ticks <= 0L) {
+            return 0D;
+        }
+
+        return (schedulerTotalNanos.get() / 1_000_000D) / ticks;
+    }
+
+    public double getMaxTickMillis() {
+        return schedulerMaxNanos.get() / 1_000_000D;
+    }
+
+    public long getBossParticleSafePlacements() {
+        return bossParticleSafePlacements.get();
+    }
+
+    public long getPacketCount() {
+        return nmsAdapter.getPacketCount();
+    }
+
+    public long getActionBarPackets() {
+        return nmsAdapter.getActionBarPackets();
+    }
+
+    public long getTitlePackets() {
+        return nmsAdapter.getTitlePackets();
+    }
+
+    public long getBossSpawnPackets() {
+        return nmsAdapter.getBossSpawnPackets();
+    }
+
+    public long getBossMetadataPackets() {
+        return nmsAdapter.getBossMetadataPackets();
+    }
+
+    public long getBossTeleportPackets() {
+        return nmsAdapter.getBossTeleportPackets();
+    }
+
+    public long getBossDestroyPackets() {
+        return nmsAdapter.getBossDestroyPackets();
+    }
+
+    public long getStatisticPackets() {
+        return nmsAdapter.getStatisticPackets();
+    }
+
+    public long getNmsFailureCount() {
+        return nmsAdapter.getFailureCount();
+    }
+
+    public long getNmsReflectionResolutions() {
+        return nmsAdapter.getReflectionResolutions();
     }
 
     /**
-     * Variante de diagnostic permettant de tester plusieurs stratégies sans
-     * modifier hud.yml entre chaque essai.
-     */
-    public void testBossBar(
-            Player player,
-            String entityTypeOverride,
-            String positionModeOverride,
-            Boolean invisibleOverride) {
-
-        if (player == null || !player.isOnline()) {
-            return;
-        }
-
-        UUID uuid = player.getUniqueId();
-        PlayerHudState state =
-            getOrCreateState(uuid);
-
-        String previousEntityType = bossEntityType;
-        String previousPositionMode = bossPositionMode;
-        boolean previousInvisible = bossInvisibleEntity;
-        float previousMaxHealth = bossEntityMaxHealth;
-
-        if (entityTypeOverride != null
-                && !entityTypeOverride.trim().isEmpty()) {
-
-            bossEntityType =
-                normalizeBossEntityType(entityTypeOverride);
-
-            bossEntityMaxHealth =
-                defaultMaxHealthFor(bossEntityType);
-        }
-
-        if (positionModeOverride != null
-                && !positionModeOverride.trim().isEmpty()) {
-
-            bossPositionMode =
-                normalizeBossPositionMode(positionModeOverride);
-        }
-
-        if (invisibleOverride != null) {
-            bossInvisibleEntity =
-                invisibleOverride.booleanValue();
-        }
-
-        debugHud("[HUD-DEBUG] TestHud options: type="
-            + bossEntityType
-            + " maxHealth=" + bossEntityMaxHealth
-            + " positionMode=" + bossPositionMode
-            + " offsetY=" + bossOffsetY
-            + " forward=" + bossForwardOffset
-            + " invisible=" + bossInvisibleEntity
-            + " follow=" + bossFollowPlayer);
-
-        if (state.bossBarEntityId != -1) {
-            hideBossBar(player, state);
-        }
-
-        try {
-            sendBossBar(
-                player,
-                0.75F,
-                "§bTest BossBar §a75% §7- KjobsUltimate",
-                state);
-
-            state.testBossBarUntilMs =
-                System.currentTimeMillis()
-                    + bossTestDurationMs;
-
-            debugHud("[HUD-DEBUG] TestHud auto-hide dans "
-                + bossTestDurationMs
-                + "ms pour "
-                + player.getName());
-        } finally {
-            bossEntityType = previousEntityType;
-            bossPositionMode = previousPositionMode;
-            bossInvisibleEntity = previousInvisible;
-            bossEntityMaxHealth = previousMaxHealth;
-        }
-    }
-
-    /**
-     * Recharge les valeurs mises en cache depuis hud.yml.
+     * Recharge uniquement des valeurs deja parsees.
+     * Les classes NMS restent resolues une seule fois pour toute la vie du jar.
      */
     public void reloadHudConfig() {
-        org.bukkit.configuration.file.FileConfiguration cfg =
-            plugin.getConfigManager().getHudConfig();
+        FileConfiguration cfg =
+            plugin.getConfigManager()
+                .getHudConfig();
 
         bossEnabled =
-            cfg.getBoolean("bossbar.enabled", true);
+            cfg.getBoolean(
+                "bossbar.enabled",
+                true
+            );
 
         bossResetMs =
             secondsToMillis(
                 cfg.getLong(
                     "bossbar.bossbar_timing_reset",
-                    8L));
-
-        long updateTicks =
-            Math.max(
-                1L,
-                cfg.getLong(
-                    "bossbar.update_interval_ticks",
-                    40L));
+                    8L
+                )
+            );
 
         bossUpdateMs =
-            safeMultiply(updateTicks, 50L);
+            Math.max(
+                50L,
+                (long) Math.max(
+                    1,
+                    cfg.getInt(
+                        "bossbar.update_interval_ticks",
+                        40
+                    )
+                ) * 50L
+            );
 
         bossOffsetY =
             cfg.getDouble(
                 "bossbar.entity_offset_y",
-                -30.0D);
+                -30.0D
+            );
 
         bossForwardOffset =
-            cfg.getDouble(
-                "bossbar.entity_forward_offset",
-                0.0D);
+            clamp(
+                cfg.getDouble(
+                    "bossbar.placement.front_distance",
+                    24.0D
+                ),
+                4.0D,
+                60.0D
+            );
+
+        bossFrontFarDistance =
+            clamp(
+                cfg.getDouble(
+                    "bossbar.placement.front_far_distance",
+                    40.0D
+                ),
+                8.0D,
+                60.0D
+            );
+
+        bossAutoDistance =
+            clamp(
+                cfg.getDouble(
+                    "bossbar.placement.auto_distance",
+                    36.0D
+                ),
+                8.0D,
+                60.0D
+            );
+
+        bossAutoVerticalOffset =
+            clamp(
+                cfg.getDouble(
+                    "bossbar.placement.auto_vertical_offset",
+                    -7.0D
+                ),
+                -20.0D,
+                20.0D
+            );
+
+        /*
+         * Sous 50 % de vie, le client 1.8 met le Wither en état armored et
+         * génère ses particules blanches. On garde donc le Wither DEVANT le
+         * joueur (bossbar fiable) mais avec un placement plus bas.
+         */
+        bossArmoredDistance =
+            clamp(
+                cfg.getDouble(
+                    "bossbar.placement.armored_distance",
+                    28.0D
+                ),
+                8.0D,
+                60.0D
+            );
+
+        bossArmoredVerticalOffset =
+            clamp(
+                cfg.getDouble(
+                    "bossbar.placement.armored_vertical_offset",
+                    -18.0D
+                ),
+                -30.0D,
+                10.0D
+            );
+
+        bossArmoredThreshold =
+            clamp(
+                cfg.getDouble(
+                    "bossbar.placement.armored_threshold",
+                    0.50D
+                ),
+                0.01D,
+                0.99D
+            );
 
         bossPositionMode =
-            normalizeBossPositionMode(
+            normalizePositionMode(
                 cfg.getString(
-                    "bossbar.position_mode",
-                    "FRONT"));
+                    "bossbar.placement.profile",
+                    "AUTO"
+                )
+            );
 
         bossFollowPlayer =
             cfg.getBoolean(
                 "bossbar.follow_player",
-                true);
+                true
+            );
 
         bossInvisibleEntity =
             cfg.getBoolean(
                 "bossbar.invisible_entity",
-                true);
+                true
+            );
 
         bossMinProgress =
             clamp(
                 cfg.getDouble(
                     "bossbar.minimum_progress",
-                    0.05D),
+                    0.05D
+                ),
                 0.01D,
-                1.0D);
+                1.0D
+            );
 
         bossEntityType =
-            normalizeBossEntityType(
+            normalizeEntityType(
                 cfg.getString(
                     "bossbar.entity_type",
-                    "WITHER"));
-
-        double defaultMaxHealth =
-            "ENDER_DRAGON".equals(bossEntityType)
-                ? 200.0D
-                : 300.0D;
-
-        double configuredMaxHealth =
-            cfg.getDouble(
-                "bossbar.max_health",
-                defaultMaxHealth);
+                    "WITHER"
+                )
+            );
 
         bossEntityMaxHealth =
             (float) Math.max(
                 1.0D,
-                configuredMaxHealth);
+                cfg.getDouble(
+                    "bossbar.max_health",
+                    defaultMaxHealth(bossEntityType)
+                )
+            );
 
         bossTestDurationMs =
             secondsToMillis(
@@ -288,32 +393,49 @@ public final class HudManager {
                     1L,
                     cfg.getLong(
                         "bossbar.test_duration_seconds",
-                        8L)));
+                        8L
+                    )
+                )
+            );
 
-        if ("ENDER_DRAGON".equals(bossEntityType)
-                && Math.abs(
-                    bossEntityMaxHealth - 200.0F)
-                    > 0.001F) {
+        bossTitleFormat =
+            value(
+                cfg.getString(
+                    "bossbar.title_format",
+                    "&a{job} &7Lv.&e{level} &8| "
+                        + "&a{xp}&8/&a{xp_next} &7XP"
+                )
+            );
 
-            KjobLogger.warn(
-                "[HUD] bossbar.entity_type=ENDER_DRAGON "
-                    + "utilise normalement max_health=200.0 "
-                    + "en Minecraft 1.8.");
-        }
+        bossTitleFormatMax =
+            value(
+                cfg.getString(
+                    "bossbar.title_format_max_level",
+                    "&a{job} &7Lv.&e{level} &8| &6&lMAX"
+                )
+            );
+
+        hideWitherParticles =
+            cfg.getBoolean(
+                "bossbar.hide_wither_particles",
+                true
+            );
 
         abEnabled =
             cfg.getBoolean(
                 "actionbar.enabled",
-                true);
+                true
+            );
 
         abFormat =
-            nonNull(
+            value(
                 cfg.getString(
                     "actionbar.format",
-                    "&b{job} Lv.&e{level} &8| "
+                    "&a{job} &7Lv.&e{level} &8| "
                         + "&a+{xp_gained} XP "
-                        + "&8(&7{xp}&8/&7{xp_next}&8)"),
-                "");
+                        + "&8(&7{xp}&8/&7{xp_next}&8)"
+                )
+            );
 
         abDisplayMs =
             secondsToMillis(
@@ -321,27 +443,102 @@ public final class HudManager {
                     0L,
                     cfg.getLong(
                         "actionbar.display_duration",
-                        3L)));
+                        3L
+                    )
+                )
+            );
 
-        hudWindowMs =
+        abAccumulationWindowMs =
             Math.max(
                 50L,
                 cfg.getLong(
                     "actionbar.accumulation_window_ms",
-                    800L));
+                    800L
+                )
+            );
 
-        debugHud("[HUD-DEBUG] Config bossbar: enabled="
-            + bossEnabled
-            + " type=" + bossEntityType
-            + " maxHealth=" + bossEntityMaxHealth
-            + " positionMode=" + bossPositionMode
-            + " offsetY=" + bossOffsetY
-            + " forward=" + bossForwardOffset
-            + " invisible=" + bossInvisibleEntity
-            + " follow=" + bossFollowPlayer
-            + " resetMs=" + bossResetMs
-            + " testMs=" + bossTestDurationMs
-            + " updateMs=" + bossUpdateMs);
+        abRefreshMs =
+            (long) Math.max(
+                1,
+                cfg.getInt(
+                    "performance.actionbar_refresh_interval_ticks",
+                    40
+                )
+            ) * 50L;
+
+        schedulerIntervalTicks =
+            Math.max(
+                1,
+                Math.min(
+                    20,
+                    cfg.getInt(
+                        "performance.scheduler_interval_ticks",
+                        2
+                    )
+                )
+            );
+
+        /*
+         * Une config bossbar changee a chaud ne doit pas garder une ancienne
+         * fake entity avec l'ancien type/placement.
+         */
+        for (Map.Entry<UUID, PlayerHudState> entry
+                : states.entrySet()) {
+
+            PlayerHudState state = entry.getValue();
+
+            if (state == null
+                    || state.bossHandle == null) {
+
+                continue;
+            }
+
+            Player player =
+                Bukkit.getPlayer(entry.getKey());
+
+            if (player != null
+                    && player.isOnline()) {
+
+                nmsAdapter.destroyBoss(
+                    player,
+                    state.bossHandle
+                );
+            }
+
+            state.bossHandle = null;
+            state.lastBossRefreshMs = 0L;
+        }
+
+        if (updateTask != null) {
+            startUpdateTask();
+        }
+
+        if ("WITHER".equals(bossEntityType)) {
+            KjobLogger.info(
+                "[HUD] BossBar placement="
+                    + bossPositionMode
+                    + ", front="
+                    + bossForwardOffset
+                    + ", far="
+                    + bossFrontFarDistance
+                    + ", auto="
+                    + bossAutoDistance
+                    + "/Y"
+                    + (bossAutoVerticalOffset >= 0D ? "+" : "")
+                    + bossAutoVerticalOffset
+                    + ", armored="
+                    + bossArmoredDistance
+                    + "/Y"
+                    + (bossArmoredVerticalOffset >= 0D ? "+" : "")
+                    + bossArmoredVerticalOffset
+                    + "@"
+                    + Math.round(bossArmoredThreshold * 100D)
+                    + "%"
+                    + ", particle-safe="
+                    + (hideWitherParticles ? "ON" : "OFF")
+                    + "."
+            );
+        }
     }
 
     private void startUpdateTask() {
@@ -350,24 +547,22 @@ public final class HudManager {
         }
 
         updateTask =
-            Bukkit.getScheduler().runTaskTimer(
-                plugin,
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        tick();
-                    }
-                },
-                2L,
-                2L);
+            Bukkit.getScheduler()
+                .runTaskTimer(
+                    plugin,
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            tick();
+                        }
+                    },
+                    schedulerIntervalTicks,
+                    schedulerIntervalTicks
+                );
     }
 
     /**
-     * Enregistre un gain d'XP pour l'affichage.
-     *
-     * Le paramètre xpGained est conservé pour l'API publique existante.
-     * Lorsque LevelUpResult est disponible, getXpActual() reste la source de
-     * vérité afin de ne jamais afficher l'XP brute avant multiplicateurs/caps.
+     * Gain XP reel deja applique.
      */
     public void onXpGain(
             Player player,
@@ -379,19 +574,22 @@ public final class HudManager {
         if (player == null
                 || data == null
                 || jobId == null
-                || jobId.trim().isEmpty()) {
+                || jobId.trim().isEmpty()
+                || !player.isOnline()
+                || !data.isHudEnabled()) {
+
             return;
         }
 
-        if (!player.isOnline()
-                || !data.isHudEnabled()
-                || (!data.isActionBarHudEnabled()
-                    && !data.isBossBarHudEnabled())) {
+        if (!data.isActionBarHudEnabled()
+                && !data.isBossBarHudEnabled()) {
+
             return;
         }
 
         JobDefinition job =
-            plugin.getJobRegistry().getJob(jobId);
+            plugin.getJobRegistry()
+                .getJob(jobId);
 
         if (job == null) {
             return;
@@ -402,42 +600,49 @@ public final class HudManager {
                 ? Math.max(0, xpGained)
                 : Math.max(0, result.getXpActual());
 
-        /*
-         * Aucun affichage pour un gain refusé, par exemple niveau maximum,
-         * plafond quotidien ou multiplicateur à zéro.
-         */
         if (actualXp <= 0) {
             return;
         }
 
-        UUID uuid = player.getUniqueId();
+        xpSignals.incrementAndGet();
+
+        UUID uuid =
+            player.getUniqueId();
+
         PlayerHudState state =
             getOrCreateState(uuid);
 
-        long now = System.currentTimeMillis();
+        long now =
+            System.currentTimeMillis();
 
-        if (data.isActionBarHudEnabled()) {
+        if (abEnabled
+                && data.isActionBarHudEnabled()) {
+
             boolean jobChanged =
-                !job.getId().equals(
-                    state.accumulatingJobId);
+                !job.getId()
+                    .equals(state.accumulatingJobId);
 
             boolean windowExpired =
                 state.windowStartMs > 0L
                     && now - state.windowStartMs
-                        > hudWindowMs;
+                        > abAccumulationWindowMs;
 
             boolean newWindow =
                 state.windowStartMs <= 0L
                     || state.accumulatedXp <= 0;
 
-            if (jobChanged || windowExpired || newWindow) {
+            if (jobChanged
+                    || windowExpired
+                    || newWindow) {
+
                 if (state.accumulatedXp > 0
                         && state.accumulatingJobId != null) {
 
                     flushActionBar(
                         player,
                         data,
-                        state);
+                        state
+                    );
                 }
 
                 state.accumulatedXp = 0;
@@ -449,19 +654,27 @@ public final class HudManager {
             state.accumulatedXp =
                 saturatingAdd(
                     state.accumulatedXp,
-                    actualXp);
+                    actualXp
+                );
+
         } else {
             clearActionBarState(state);
         }
 
         state.lastXpMs = now;
-        state.testBossBarUntilMs = 0L;
+        state.testBossUntilMs = 0L;
 
-        updateSnapshot(data, job, state);
+        updateSnapshot(
+            data,
+            job,
+            state
+        );
+
+        activate(uuid);
     }
 
     /**
-     * Affiche le popup de passage de niveau.
+     * Popup level-up. API conservee.
      */
     public void onLevelUp(
             Player player,
@@ -473,445 +686,341 @@ public final class HudManager {
                 || data == null
                 || jobId == null
                 || !player.isOnline()) {
+
             return;
         }
 
-        org.bukkit.configuration.file.FileConfiguration hudConfig =
-            plugin.getConfigManager().getHudConfig();
+        FileConfiguration cfg =
+            plugin.getConfigManager()
+                .getHudConfig();
 
-        boolean respectHudToggle =
-            hudConfig.getBoolean(
+        if (!cfg.getBoolean(
+                "achievement.enabled",
+                true
+            )) {
+
+            return;
+        }
+
+        if (cfg.getBoolean(
                 "achievement.respect_hud_toggle",
-                false);
-
-        if (respectHudToggle
+                false
+            )
                 && !data.isHudEnabled()) {
 
-            debugHud(
-                "[HUD-DEBUG] onLevelUp annulé : HUD désactivé pour "
-                    + player.getName());
-
             return;
         }
 
-        if (!hudConfig.getBoolean(
-                "achievement.enabled",
-                true)) {
-
-            debugHud(
-                "[HUD-DEBUG] onLevelUp annulé : "
-                    + "achievement.enabled=false.");
-
-            return;
-        }
-
-        UUID uuid = player.getUniqueId();
         PlayerHudState state =
-            getOrCreateState(uuid);
+            getOrCreateState(
+                player.getUniqueId()
+            );
 
-        long now = System.currentTimeMillis();
+        long now =
+            System.currentTimeMillis();
+
         long cooldown =
             Math.max(
                 0L,
-                hudConfig.getLong(
+                cfg.getLong(
                     "achievement.popup_cooldown_ms",
-                    2000L));
+                    2000L
+                )
+            );
 
-        if (now - state.lastPopupMs < cooldown) {
-            debugHud(
-                "[HUD-DEBUG] onLevelUp annulé : cooldown actif - "
-                    + (cooldown
-                        - (now - state.lastPopupMs))
-                    + "ms restant pour "
-                    + player.getName());
+        if (now - state.lastPopupMs
+                < cooldown) {
 
             return;
         }
 
         state.lastPopupMs = now;
+        levelPopupSignals.incrementAndGet();
 
         JobDefinition job =
-            plugin.getJobRegistry().getJob(jobId);
+            plugin.getJobRegistry()
+                .getJob(jobId);
 
         String jobName =
             job == null
                 ? jobId
                 : job.getDisplayName();
 
-        int safeNewLevel =
+        int safeLevel =
             job == null
                 ? Math.max(0, newLevel)
                 : Math.max(
                     0,
                     Math.min(
                         job.getMaxLevel(),
-                        newLevel));
-
-        String rawTitle =
-            nonNull(
-                hudConfig.getString(
-                    "achievement.title",
-                    "§6§lNIVEAU {level}"),
-                "");
-
-        String rawSubtitle =
-            nonNull(
-                hudConfig.getString(
-                    "achievement.subtitle",
-                    "§b{job} §7atteint !"),
-                "");
-
-        int fadeIn =
-            Math.max(
-                0,
-                hudConfig.getInt(
-                    "achievement.fade_in",
-                    10));
-
-        int stay =
-            Math.max(
-                0,
-                hudConfig.getInt(
-                    "achievement.stay",
-                    50));
-
-        int fadeOut =
-            Math.max(
-                0,
-                hudConfig.getInt(
-                    "achievement.fade_out",
-                    15));
+                        newLevel
+                    )
+                );
 
         String title =
-            colorize(
-                rawTitle
+            color(
+                value(
+                    cfg.getString(
+                        "achievement.title",
+                        "&6&lNIVEAU {level}"
+                    )
+                )
                     .replace("{job}", jobName)
                     .replace(
                         "{level}",
-                        String.valueOf(
-                            safeNewLevel)));
+                        String.valueOf(safeLevel)
+                    )
+            );
 
         String subtitle =
-            colorize(
-                rawSubtitle
+            color(
+                value(
+                    cfg.getString(
+                        "achievement.subtitle",
+                        "&b{job} &7atteint !"
+                    )
+                )
                     .replace("{job}", jobName)
                     .replace(
                         "{level}",
-                        String.valueOf(
-                            safeNewLevel)));
-
-        debugHud(
-            "[HUD-DEBUG] Achievement popup -> joueur="
-                + player.getName()
-                + " titre=\"" + title + "\""
-                + " sous-titre=\"" + subtitle + "\""
-                + " fadeIn=" + fadeIn
-                + " stay=" + stay
-                + " fadeOut=" + fadeOut);
+                        String.valueOf(safeLevel)
+                    )
+            );
 
         String mode =
-            nonNull(
-                hudConfig.getString(
+            value(
+                cfg.getString(
                     "achievement.mode",
-                    "TITLE_AND_CHAT"),
-                "TITLE_AND_CHAT")
+                    "TITLE_AND_CHAT"
+                )
+            )
                 .trim()
-                .toUpperCase();
+                .toUpperCase()
+                .replace('-', '_');
 
         if (mode.contains("TITLE")) {
-            sendTitle(
+            nmsAdapter.sendTitle(
                 player,
                 title,
                 subtitle,
-                fadeIn,
-                stay,
-                fadeOut);
+                Math.max(
+                    0,
+                    cfg.getInt(
+                        "achievement.fade_in",
+                        10
+                    )
+                ),
+                Math.max(
+                    0,
+                    cfg.getInt(
+                        "achievement.stay",
+                        50
+                    )
+                ),
+                Math.max(
+                    0,
+                    cfg.getInt(
+                        "achievement.fade_out",
+                        15
+                    )
+                ),
+                cfg.getBoolean(
+                    "achievement.reset_before_send",
+                    true
+                )
+            );
         }
 
         if (mode.contains("ACTIONBAR")
                 && data.isActionBarHudEnabled()) {
 
             String actionbar =
-                nonNull(
-                    hudConfig.getString(
-                        "achievement.actionbar",
-                        "&6&lNIVEAU {level} &8- &b{job}"),
-                    "");
-
-            sendActionBar(
-                player,
-                colorize(
-                    actionbar
+                color(
+                    value(
+                        cfg.getString(
+                            "achievement.actionbar",
+                            "&6&lNIVEAU {level} &8- &b{job}"
+                        )
+                    )
                         .replace("{job}", jobName)
                         .replace(
                             "{level}",
-                            String.valueOf(
-                                safeNewLevel))));
+                            String.valueOf(safeLevel)
+                        )
+                );
 
-            debugHud(
-                "[HUD-DEBUG] Achievement actionbar envoyé à "
-                    + player.getName());
+            nmsAdapter.sendActionBar(
+                player,
+                actionbar
+            );
         }
 
-        boolean sentChat = false;
+        boolean chatSent = false;
 
         if (mode.contains("CHAT")) {
-            sendAchievementChat(
+            sendLevelChat(
                 player,
-                hudConfig,
+                cfg,
                 jobName,
-                safeNewLevel,
-                "mode");
-
-            sentChat = true;
+                safeLevel
+            );
+            chatSent = true;
         }
 
-        if (!sentChat
-                && hudConfig.getBoolean(
+        if (!chatSent
+                && cfg.getBoolean(
                     "achievement.force_chat_fallback",
-                    true)) {
+                    true
+                )) {
 
-            sendAchievementChat(
+            sendLevelChat(
                 player,
-                hudConfig,
+                cfg,
                 jobName,
-                safeNewLevel,
-                "force_chat_fallback");
+                safeLevel
+            );
         }
 
-        sendVanillaAchievementToast(
+        sendVanillaToast(
             player,
-            hudConfig,
-            jobId);
+            cfg,
+            jobId
+        );
     }
 
-    private void sendAchievementChat(
+    private void sendLevelChat(
             Player player,
-            org.bukkit.configuration.file.FileConfiguration hudConfig,
+            FileConfiguration cfg,
             String jobName,
-            int newLevel,
-            String source) {
-
-        String chat =
-            nonNull(
-                hudConfig.getString(
-                    "achievement.chat",
-                    "&6&lNIVEAU {level} &8- &b{job}"),
-                "");
+            int level) {
 
         String message =
-            colorize(
-                chat
+            color(
+                value(
+                    cfg.getString(
+                        "achievement.chat",
+                        "&6&lNIVEAU {level} &8- &b{job}"
+                    )
+                )
                     .replace("{job}", jobName)
                     .replace(
                         "{level}",
-                        String.valueOf(newLevel)));
+                        String.valueOf(level)
+                    )
+            );
 
         if (!message.isEmpty()) {
             player.sendMessage(message);
         }
-
-        debugHud(
-            "[HUD-DEBUG] Achievement chat envoyé à "
-                + player.getName()
-                + " source=" + source
-                + " message=\"" + message + "\"");
     }
 
-    private void sendVanillaAchievementToast(
+    private void sendVanillaToast(
             final Player player,
-            org.bukkit.configuration.file.FileConfiguration hudConfig,
+            final FileConfiguration cfg,
             String jobId) {
 
-        if (!hudConfig.getBoolean(
+        if (!cfg.getBoolean(
                 "achievement.vanilla_toast.enabled",
-                false)) {
+                true
+            )) {
+
             return;
         }
 
-        String key =
-            hudConfig.getString(
-                "achievement.vanilla_toast.mapping."
-                    + jobId,
-                hudConfig.getString(
+        String raw =
+            cfg.getString(
+                "achievement.vanilla_toast.mapping." + jobId,
+                cfg.getString(
                     "achievement.vanilla_toast.achievement",
-                    "OPEN_INVENTORY"));
+                    "OPEN_INVENTORY"
+                )
+            );
 
-        final org.bukkit.Achievement achievement;
+        final Achievement achievement;
 
         try {
             achievement =
-                org.bukkit.Achievement.valueOf(
-                    key.trim()
+                Achievement.valueOf(
+                    value(raw)
+                        .trim()
                         .toUpperCase()
-                        .replace('-', '_'));
+                        .replace('-', '_')
+                );
         } catch (Exception failure) {
             KjobLogger.warn(
-                "[HUD] Achievement vanilla inconnu dans hud.yml : "
-                    + key);
+                "[HUD] Achievement vanilla inconnu : " + raw
+            );
             return;
         }
 
         String method =
-            nonNull(
-                hudConfig.getString(
+            value(
+                cfg.getString(
                     "achievement.vanilla_toast.method",
-                    "BUKKIT"),
-                "BUKKIT")
+                    "BUKKIT"
+                )
+            )
                 .trim()
                 .toUpperCase()
                 .replace('-', '_');
 
-        if ("VANILLA".equals(method)
-                || "AWARD".equals(method)) {
-            method = "BUKKIT";
-        }
-
-        if ("STATISTIC".equals(method)
-                || "NMS".equals(method)) {
-            method = "PACKET";
-        }
-
         if ("PACKET".equals(method)) {
-            sendAchievementStatisticPacket(
+            nmsAdapter.sendAchievementStatistic(
                 player,
-                achievement);
+                achievement
+            );
             return;
         }
 
         if ("PACKET_THEN_BUKKIT".equals(method)) {
-            sendAchievementStatisticPacket(
+            nmsAdapter.sendAchievementStatistic(
                 player,
-                achievement);
+                achievement
+            );
 
             int delay =
                 Math.max(
                     1,
-                    hudConfig.getInt(
+                    cfg.getInt(
                         "achievement.vanilla_toast."
                             + "bukkit_after_packet_ticks",
-                        2));
+                        2
+                    )
+                );
 
-            Bukkit.getScheduler().runTaskLater(
-                plugin,
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        if (player.isOnline()) {
-                            sendBukkitAchievementToast(
-                                player,
-                                plugin.getConfigManager()
-                                    .getHudConfig(),
-                                achievement);
+            Bukkit.getScheduler()
+                .runTaskLater(
+                    plugin,
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            if (player.isOnline()) {
+                                sendBukkitToast(
+                                    player,
+                                    plugin.getConfigManager()
+                                        .getHudConfig(),
+                                    achievement
+                                );
+                            }
                         }
-                    }
-                },
-                delay);
+                    },
+                    delay
+                );
 
             return;
         }
 
-        if (!"BUKKIT".equals(method)) {
-            KjobLogger.warn(
-                "[HUD] achievement.vanilla_toast.method inconnu : "
-                    + method
-                    + " - fallback BUKKIT");
-        }
-
-        sendBukkitAchievementToast(
+        sendBukkitToast(
             player,
-            hudConfig,
-            achievement);
+            cfg,
+            achievement
+        );
     }
 
-    private boolean sendAchievementStatisticPacket(
-            Player player,
-            org.bukkit.Achievement achievement) {
-
-        try {
-            Class<?> craftPlayerClass =
-                Class.forName(
-                    "org.bukkit.craftbukkit."
-                        + NMS
-                        + ".entity.CraftPlayer");
-
-            Class<?> packetClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".Packet");
-
-            Class<?> statisticPacketClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".PacketPlayOutStatistic");
-
-            Class<?> achievementListClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".AchievementList");
-
-            String fieldName =
-                achievementListField(achievement);
-
-            if (fieldName == null) {
-                debugHud(
-                    "[HUD-DEBUG] Achievement packet mapping absent pour "
-                        + achievement.name());
-                return false;
-            }
-
-            Object nmsAchievement =
-                achievementListClass
-                    .getField(fieldName)
-                    .get(null);
-
-            java.util.Map<Object, Integer> stats =
-                new java.util.HashMap<Object, Integer>();
-
-            stats.put(
-                nmsAchievement,
-                Integer.valueOf(1));
-
-            Object packet =
-                statisticPacketClass
-                    .getConstructor(java.util.Map.class)
-                    .newInstance(stats);
-
-            sendPacketTo(
-                player,
-                packet,
-                craftPlayerClass,
-                packetClass);
-
-            debugHud(
-                "[HUD-DEBUG] Achievement packet toast envoyé à "
-                    + player.getName()
-                    + " achievement="
-                    + achievement.name()
-                    + " field=" + fieldName);
-
-            return true;
-        } catch (Exception failure) {
-            Throwable cause =
-                unwrap(failure);
-
-            debugHud(
-                "[HUD-DEBUG] Achievement packet toast impossible : "
-                    + cause.getClass().getSimpleName()
-                    + " "
-                    + cause.getMessage());
-
-            return false;
-        }
-    }
-
-    private void sendBukkitAchievementToast(
+    private void sendBukkitToast(
             final Player player,
-            org.bukkit.configuration.file.FileConfiguration hudConfig,
-            final org.bukkit.Achievement achievement) {
+            final FileConfiguration cfg,
+            final Achievement achievement) {
 
         final boolean hadBefore;
 
@@ -920,383 +1029,340 @@ public final class HudManager {
                 player.hasAchievement(achievement);
 
             if (hadBefore
-                    || hudConfig.getBoolean(
+                    || cfg.getBoolean(
                         "achievement.vanilla_toast.force_reaward",
-                        true)) {
+                        true
+                    )) {
 
                 player.removeAchievement(achievement);
             }
         } catch (Exception failure) {
-            debugHud(
-                "[HUD-DEBUG] Achievement vanilla remove impossible : "
-                    + failure.getClass().getSimpleName()
-                    + " "
-                    + failure.getMessage());
             return;
         }
 
-        final boolean restoreIfNew =
-            hudConfig.getBoolean(
+        final boolean restore =
+            cfg.getBoolean(
                 "achievement.vanilla_toast."
                     + "restore_if_not_previously_awarded",
-                true);
+                true
+            );
 
         final int restoreTicks =
             Math.max(
                 5,
-                hudConfig.getInt(
+                cfg.getInt(
                     "achievement.vanilla_toast.restore_after_ticks",
-                    60));
+                    60
+                )
+            );
 
-        Bukkit.getScheduler().runTaskLater(
-            plugin,
-            new Runnable() {
-                @Override
-                public void run() {
-                    if (!player.isOnline()) {
-                        return;
-                    }
-
-                    try {
-                        player.awardAchievement(achievement);
-
-                        debugHud(
-                            "[HUD-DEBUG] Achievement vanilla toast envoyé à "
-                                + player.getName()
-                                + " achievement="
-                                + achievement.name()
-                                + " hadBefore="
-                                + hadBefore);
-                    } catch (Exception failure) {
-                        debugHud(
-                            "[HUD-DEBUG] Achievement vanilla award impossible : "
-                                + failure.getClass()
-                                    .getSimpleName()
-                                + " "
-                                + failure.getMessage());
-
-                        org.bukkit.Achievement fallback =
-                            getFallbackAchievement(
-                                achievement);
-
-                        if (fallback != null) {
-                            debugHud(
-                                "[HUD-DEBUG] Achievement vanilla fallback vers "
-                                    + fallback.name()
-                                    + " pour "
-                                    + player.getName());
-
-                            sendBukkitAchievementToast(
-                                player,
-                                plugin.getConfigManager()
-                                    .getHudConfig(),
-                                fallback);
+        Bukkit.getScheduler()
+            .runTaskLater(
+                plugin,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!player.isOnline()) {
+                            return;
                         }
 
-                        return;
+                        try {
+                            player.awardAchievement(achievement);
+                        } catch (Exception ignored) {
+                            return;
+                        }
+
+                        if (!hadBefore && restore) {
+                            Bukkit.getScheduler()
+                                .runTaskLater(
+                                    plugin,
+                                    new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            if (!player.isOnline()) {
+                                                return;
+                                            }
+
+                                            try {
+                                                player.removeAchievement(
+                                                    achievement
+                                                );
+                                            } catch (Exception ignored) {
+                                                // Cosmetique uniquement.
+                                            }
+                                        }
+                                    },
+                                    restoreTicks
+                                );
+                        }
                     }
-
-                    if (!hadBefore && restoreIfNew) {
-                        Bukkit.getScheduler().runTaskLater(
-                            plugin,
-                            new Runnable() {
-                                @Override
-                                public void run() {
-                                    if (!player.isOnline()) {
-                                        return;
-                                    }
-
-                                    try {
-                                        player.removeAchievement(
-                                            achievement);
-
-                                        debugHud(
-                                            "[HUD-DEBUG] Achievement vanilla "
-                                                + "restauré/retiré pour "
-                                                + player.getName()
-                                                + " achievement="
-                                                + achievement.name());
-                                    } catch (Exception failure) {
-                                        debugHud(
-                                            "[HUD-DEBUG] Achievement vanilla "
-                                                + "restore impossible : "
-                                                + failure.getClass()
-                                                    .getSimpleName()
-                                                + " "
-                                                + failure.getMessage());
-                                    }
-                                }
-                            },
-                            restoreTicks);
-                    }
-                }
-            },
-            1L);
+                },
+                1L
+            );
     }
 
-    private org.bukkit.Achievement getFallbackAchievement(
-            org.bukkit.Achievement current) {
-
-        String key =
-            plugin.getConfigManager()
-                .getHudConfig()
-                .getString(
-                    "achievement.vanilla_toast."
-                        + "fallback_achievement",
-                    "OPEN_INVENTORY");
-
-        try {
-            org.bukkit.Achievement fallback =
-                org.bukkit.Achievement.valueOf(
-                    key.trim()
-                        .toUpperCase()
-                        .replace('-', '_'));
-
-            return fallback == current
-                ? null
-                : fallback;
-        } catch (Exception failure) {
-            debugHud(
-                "[HUD-DEBUG] Achievement fallback invalide : "
-                    + key);
-
-            return current
-                    == org.bukkit.Achievement.OPEN_INVENTORY
-                ? null
-                : org.bukkit.Achievement.OPEN_INVENTORY;
-        }
+    public void testBossBar(Player player) {
+        testBossBar(
+            player,
+            null,
+            null,
+            null
+        );
     }
 
-    private String achievementListField(
-            org.bukkit.Achievement achievement) {
+    public void testBossBar(
+            Player player,
+            String entityTypeOverride,
+            String positionModeOverride,
+            Boolean invisibleOverride) {
 
-        switch (achievement) {
-            case OPEN_INVENTORY:
-                return "f";
-            case MINE_WOOD:
-                return "g";
-            case BUILD_WORKBENCH:
-                return "h";
-            case BUILD_PICKAXE:
-                return "i";
-            case BUILD_FURNACE:
-                return "j";
-            case ACQUIRE_IRON:
-                return "k";
-            case BUILD_HOE:
-                return "l";
-            case MAKE_BREAD:
-                return "m";
-            case BAKE_CAKE:
-                return "n";
-            case BUILD_BETTER_PICKAXE:
-                return "o";
-            case COOK_FISH:
-                return "p";
-            case ON_A_RAIL:
-                return "q";
-            case BUILD_SWORD:
-                return "r";
-            case KILL_ENEMY:
-                return "s";
-            case KILL_COW:
-                return "t";
-            case FLY_PIG:
-                return "u";
-            case SNIPE_SKELETON:
-                return "v";
-            case GET_DIAMONDS:
-                return "w";
-            case DIAMONDS_TO_YOU:
-                return "x";
-            case NETHER_PORTAL:
-                return "y";
-            case GHAST_RETURN:
-                return "z";
-            case GET_BLAZE_ROD:
-                return "A";
-            case BREW_POTION:
-                return "B";
-            case END_PORTAL:
-                return "C";
-            case THE_END:
-                return "D";
-            case ENCHANTMENTS:
-                return "E";
-            case OVERKILL:
-                return "F";
-            case BOOKCASE:
-                return "G";
-            case BREED_COW:
-                return "H";
-            case SPAWN_WITHER:
-                return "I";
-            case KILL_WITHER:
-                return "J";
-            case FULL_BEACON:
-                return "K";
-            case EXPLORE_ALL_BIOMES:
-                return "L";
-            case OVERPOWERED:
-                return "M";
-            default:
-                return null;
-        }
-    }
+        if (player == null
+                || !player.isOnline()) {
 
-    /**
-     * Supprime l'état HUD d'un joueur et masque sa bossbar.
-     */
-    public void removePlayer(Player player) {
-        if (player == null) {
             return;
         }
 
         PlayerHudState state =
-            states.remove(player.getUniqueId());
+            getOrCreateState(
+                player.getUniqueId()
+            );
 
-        if (state != null) {
-            hideBossBar(player, state);
-        }
-    }
-
-    public void clearActionBar(Player player) {
-        if (player == null || !player.isOnline()) {
-            return;
-        }
-
-        PlayerHudState state =
-            states.get(player.getUniqueId());
-
-        if (state != null) {
-            clearActionBarState(state);
+        if (state.bossHandle != null) {
+            nmsAdapter.destroyBoss(
+                player,
+                state.bossHandle
+            );
+            state.bossHandle = null;
         }
 
-        sendActionBar(player, "");
-    }
+        state.testEntityType =
+            entityTypeOverride == null
+                ? bossEntityType
+                : normalizeEntityType(entityTypeOverride);
 
-    /**
-     * Arrête le scheduler et nettoie toutes les bossbars actives.
-     */
-    public void shutdown() {
-        if (updateTask != null) {
-            updateTask.cancel();
-            updateTask = null;
-        }
+        state.testPositionMode =
+            positionModeOverride == null
+                ? bossPositionMode
+                : normalizePositionMode(positionModeOverride);
 
-        for (Map.Entry<UUID, PlayerHudState> entry
-                : states.entrySet()) {
+        state.testInvisible =
+            invisibleOverride == null
+                ? bossInvisibleEntity
+                : invisibleOverride.booleanValue();
 
-            Player player =
-                Bukkit.getPlayer(entry.getKey());
+        state.testBossUntilMs =
+            System.currentTimeMillis()
+                + bossTestDurationMs;
 
-            if (player != null) {
-                hideBossBar(
-                    player,
-                    entry.getValue());
-            } else {
-                resetBossBarState(
-                    entry.getValue());
-            }
-        }
+        showBossBar(
+            player,
+            state,
+            0.75F,
+            "§bTest BossBar §a75% §7- KjobsUltimate",
+            true
+        );
 
-        states.clear();
+        activate(
+            player.getUniqueId()
+        );
     }
 
     private void tick() {
-        long now = System.currentTimeMillis();
+        long start =
+            System.nanoTime();
 
-        for (Map.Entry<UUID, PlayerHudState> entry
-                : states.entrySet()) {
+        schedulerTicks.incrementAndGet();
 
-            UUID uuid = entry.getKey();
-            PlayerHudState state = entry.getValue();
-            Player player = Bukkit.getPlayer(uuid);
+        try {
+            if (active.isEmpty()) {
+                return;
+            }
 
-            if (player == null || !player.isOnline()) {
-                if (states.remove(uuid, state)) {
-                    resetBossBarState(state);
+            long now =
+                System.currentTimeMillis();
+
+            for (UUID uuid : active.keySet()) {
+                PlayerHudState state =
+                    states.get(uuid);
+
+                if (state == null) {
+                    active.remove(uuid);
+                    continue;
                 }
-                continue;
-            }
 
-            if (state.testBossBarUntilMs > 0L) {
-                if (now >= state.testBossBarUntilMs) {
-                    hideBossBar(player, state);
-                    state.testBossBarUntilMs = 0L;
+                schedulerPlayerVisits.incrementAndGet();
+
+                Player player =
+                    Bukkit.getPlayer(uuid);
+
+                if (player == null
+                        || !player.isOnline()) {
+
+                    active.remove(uuid);
+                    states.remove(uuid);
+                    continue;
                 }
-                continue;
-            }
 
-            PlayerData data =
-                plugin.getPlayerDataManager().get(player);
+                boolean keepActive = false;
 
-            if (data == null || !data.isHudEnabled()) {
-                if (state.bossBarEntityId != -1) {
-                    hideBossBar(player, state);
+                if (state.testBossUntilMs > 0L) {
+                    if (now >= state.testBossUntilMs) {
+                        hideBossBar(
+                            player,
+                            state
+                        );
+                        clearTestState(state);
+                    } else {
+                        keepActive = true;
+                    }
                 }
-                continue;
-            }
 
-            if (abEnabled
-                    && data.isActionBarHudEnabled()
-                    && state.accumulatedXp > 0
-                    && state.accumulatingJobId != null
-                    && now - state.windowStartMs
-                        > hudWindowMs) {
+                PlayerData data =
+                    plugin.getPlayerDataManager()
+                        .get(player);
 
-                flushActionBar(
-                    player,
-                    data,
-                    state);
+                if (data == null
+                        || !data.isHudEnabled()) {
 
-                state.accumulatedXp = 0;
-                state.windowStartMs = 0L;
-            }
+                    if (state.bossHandle != null) {
+                        hideBossBar(
+                            player,
+                            state
+                        );
+                    }
 
-            if (abEnabled
-                    && data.isActionBarHudEnabled()
-                    && state.cachedActionBarMsg != null
-                    && now < state.displayUntilMs) {
+                    clearActionBarState(state);
 
-                sendActionBar(
-                    player,
-                    state.cachedActionBarMsg);
-            } else if (state.cachedActionBarMsg != null
-                    && now >= state.displayUntilMs) {
+                    if (!keepActive) {
+                        active.remove(uuid);
+                    }
 
-                state.cachedActionBarMsg = null;
-                state.displayUntilMs = 0L;
-            }
+                    continue;
+                }
 
-            if (bossEnabled
-                    && data.isBossBarHudEnabled()
-                    && state.snapshotJobId != null) {
+                if (abEnabled
+                        && data.isActionBarHudEnabled()) {
 
-                boolean shouldStayVisible =
-                    bossResetMs <= 0L
-                        || now - state.lastXpMs
-                            < bossResetMs;
+                    if (state.accumulatedXp > 0
+                            && state.accumulatingJobId != null
+                            && now - state.windowStartMs
+                                >= abAccumulationWindowMs) {
 
-                if (shouldStayVisible) {
-                    if (now
-                            - state.lastBossBarRefreshMs
-                            >= bossUpdateMs) {
-
-                        refreshBossBar(
+                        flushActionBar(
                             player,
                             data,
-                            state);
+                            state
+                        );
 
-                        state.lastBossBarRefreshMs =
-                            now;
+                        state.accumulatedXp = 0;
+                        state.windowStartMs = 0L;
                     }
-                } else if (state.bossBarEntityId != -1) {
-                    hideBossBar(player, state);
+
+                    if (state.cachedActionBarMsg != null) {
+                        if (now >= state.displayUntilMs) {
+                            nmsAdapter.sendActionBar(
+                                player,
+                                ""
+                            );
+
+                            state.cachedActionBarMsg = null;
+                            state.displayUntilMs = 0L;
+
+                        } else {
+                            keepActive = true;
+
+                            if (now - state.lastActionBarSendMs
+                                    >= abRefreshMs) {
+
+                                nmsAdapter.sendActionBar(
+                                    player,
+                                    state.cachedActionBarMsg
+                                );
+
+                                state.lastActionBarSendMs = now;
+                            }
+                        }
+                    }
+
+                    if (state.accumulatedXp > 0) {
+                        keepActive = true;
+                    }
+                } else {
+                    if (state.cachedActionBarMsg != null) {
+                        nmsAdapter.sendActionBar(
+                            player,
+                            ""
+                        );
+                    }
+
+                    clearActionBarState(
+                        state
+                    );
                 }
-            } else if (state.bossBarEntityId != -1) {
-                hideBossBar(player, state);
+
+                if (state.testBossUntilMs <= 0L) {
+                    if (bossEnabled
+                            && data.isBossBarHudEnabled()
+                            && state.snapshotJobId != null) {
+
+                        boolean visible =
+                            bossResetMs <= 0L
+                                || now - state.lastXpMs
+                                    < bossResetMs;
+
+                        if (visible) {
+                            keepActive = true;
+
+                            if (state.bossHandle == null
+                                    || now - state.lastBossRefreshMs
+                                        >= bossUpdateMs) {
+
+                                refreshBossBar(
+                                    player,
+                                    data,
+                                    state
+                                );
+
+                                state.lastBossRefreshMs = now;
+                            }
+
+                        } else if (state.bossHandle != null) {
+                            hideBossBar(
+                                player,
+                                state
+                            );
+                        }
+
+                    } else if (state.bossHandle != null) {
+                        hideBossBar(
+                            player,
+                            state
+                        );
+                    }
+                }
+
+                if (!keepActive
+                        && state.testBossUntilMs <= 0L
+                        && state.accumulatedXp <= 0
+                        && state.cachedActionBarMsg == null
+                        && state.bossHandle == null) {
+
+                    active.remove(uuid);
+                }
             }
+
+        } finally {
+            long elapsed =
+                Math.max(
+                    0L,
+                    System.nanoTime() - start
+                );
+
+            schedulerTotalNanos.addAndGet(elapsed);
+            updateMax(
+                schedulerMaxNanos,
+                elapsed
+            );
         }
     }
 
@@ -1308,6 +1374,7 @@ public final class HudManager {
         if (player == null
                 || !player.isOnline()
                 || state.accumulatingJobId == null) {
+
             return;
         }
 
@@ -1320,66 +1387,75 @@ public final class HudManager {
             return;
         }
 
-        /*
-         * Si le snapshot correspond au même métier, on l'utilise afin de
-         * conserver l'état exact associé à la fenêtre d'accumulation.
-         * Sinon, on recalcule depuis PlayerData.
-         */
-        if (!job.getId().equals(state.snapshotJobId)) {
-            updateSnapshot(data, job, state);
+        if (!job.getId()
+                .equals(state.snapshotJobId)) {
+
+            updateSnapshot(
+                data,
+                job,
+                state
+            );
         }
 
-        int percent =
-            calculatePercent(
+        int percentage =
+            percent(
                 state.snapshotLevel,
                 job.getMaxLevel(),
                 state.snapshotXp,
-                state.snapshotXpNext);
+                state.snapshotXpNext
+            );
 
         String message =
-            colorize(
+            color(
                 abFormat
                     .replace(
                         "{job}",
-                        job.getDisplayName())
+                        job.getDisplayName()
+                    )
                     .replace(
                         "{level}",
                         String.valueOf(
-                            state.snapshotLevel))
+                            state.snapshotLevel
+                        )
+                    )
                     .replace(
                         "{xp}",
                         String.valueOf(
-                            state.snapshotXp))
+                            state.snapshotXp
+                        )
+                    )
                     .replace(
                         "{xp_next}",
                         String.valueOf(
-                            state.snapshotXpNext))
+                            state.snapshotXpNext
+                        )
+                    )
                     .replace(
                         "{xp_gained}",
                         String.valueOf(
                             Math.max(
                                 0,
-                                state.accumulatedXp)))
+                                state.accumulatedXp
+                            )
+                        )
+                    )
                     .replace(
                         "{percent}",
-                        String.valueOf(percent)));
+                        String.valueOf(percentage)
+                    )
+            );
+
+        long now =
+            System.currentTimeMillis();
 
         state.cachedActionBarMsg = message;
-        state.displayUntilMs =
-            System.currentTimeMillis()
-                + abDisplayMs;
+        state.displayUntilMs = now + abDisplayMs;
+        state.lastActionBarSendMs = now;
 
-        sendActionBar(player, message);
-    }
-
-    private void clearActionBarState(
-            PlayerHudState state) {
-
-        state.accumulatedXp = 0;
-        state.accumulatingJobId = null;
-        state.windowStartMs = 0L;
-        state.cachedActionBarMsg = null;
-        state.displayUntilMs = 0L;
+        nmsAdapter.sendActionBar(
+            player,
+            message
+        );
     }
 
     private void refreshBossBar(
@@ -1387,70 +1463,358 @@ public final class HudManager {
             PlayerData data,
             PlayerHudState state) {
 
-        String jobId = state.snapshotJobId;
-
         JobDefinition job =
-            plugin.getJobRegistry().getJob(jobId);
+            plugin.getJobRegistry()
+                .getJob(state.snapshotJobId);
 
         if (job == null) {
-            hideBossBar(player, state);
+            hideBossBar(
+                player,
+                state
+            );
             return;
         }
 
-        updateSnapshot(data, job, state);
-
-        int level = state.snapshotLevel;
-        int xp = state.snapshotXp;
-        int xpNext = state.snapshotXpNext;
+        updateSnapshot(
+            data,
+            job,
+            state
+        );
 
         float progress =
             LevelUtil.getProgressPercent(
                 data,
-                job);
+                job
+            );
 
-        String format =
-            level >= job.getMaxLevel()
-                ? plugin.getConfigManager()
-                    .getHudConfig()
-                    .getString(
-                        "bossbar.title_format_max_level",
-                        "&b{job} Lv.&e{level} &8| &6MAX")
-                : plugin.getConfigManager()
-                    .getHudConfig()
-                    .getString(
-                        "bossbar.title_format",
-                        "&b{job} Lv.&e{level} "
-                            + "&8| &a{xp}&8/&a{xp_next} XP");
-
-        int percent =
+        int percentage =
             LevelUtil.getProgressPercentage(
                 data,
-                job);
+                job
+            );
+
+        String format =
+            state.snapshotLevel >= job.getMaxLevel()
+                ? bossTitleFormatMax
+                : bossTitleFormat;
 
         String title =
-            colorize(
-                nonNull(format, "")
+            color(
+                format
                     .replace(
                         "{job}",
-                        job.getDisplayName())
+                        job.getDisplayName()
+                    )
                     .replace(
                         "{level}",
-                        String.valueOf(level))
+                        String.valueOf(
+                            state.snapshotLevel
+                        )
+                    )
                     .replace(
                         "{xp}",
-                        String.valueOf(xp))
+                        String.valueOf(
+                            state.snapshotXp
+                        )
+                    )
                     .replace(
                         "{xp_next}",
-                        String.valueOf(xpNext))
+                        String.valueOf(
+                            state.snapshotXpNext
+                        )
+                    )
                     .replace(
                         "{percent}",
-                        String.valueOf(percent)));
+                        String.valueOf(percentage)
+                    )
+            );
 
-        sendBossBar(
+        showBossBar(
             player,
+            state,
             progress,
             title,
-            state);
+            false
+        );
+    }
+
+    private void showBossBar(
+            Player player,
+            PlayerHudState state,
+            float progress,
+            String title,
+            boolean test) {
+
+        String entityType =
+            test
+                ? normalizeEntityType(state.testEntityType)
+                : bossEntityType;
+
+        String positionMode =
+            test
+                ? normalizePositionMode(state.testPositionMode)
+                : bossPositionMode;
+
+        boolean invisible =
+            test
+                ? state.testInvisible
+                : bossInvisibleEntity;
+
+        float maxHealth =
+            test
+                ? defaultMaxHealth(entityType)
+                : bossEntityMaxHealth;
+
+        float safeProgress =
+            (float) clamp(
+                progress,
+                0D,
+                1D
+            );
+
+        float health =
+            Math.max(
+                1.0F,
+                Math.min(
+                    maxHealth,
+                    (float) Math.max(
+                        bossMinProgress,
+                        safeProgress
+                    ) * maxHealth
+                )
+            );
+
+        double displayedRatio =
+            maxHealth <= 0.0F
+                ? 1.0D
+                : clamp(
+                    (double) health / (double) maxHealth,
+                    0.0D,
+                    1.0D
+                );
+
+        BossBarLocation location =
+            computeBossLocation(
+                player,
+                positionMode,
+                entityType,
+                invisible,
+                test,
+                displayedRatio
+            );
+
+        if (state.bossHandle != null
+                && !entityType.equals(
+                    state.bossHandle.getEntityType()
+                )) {
+
+            nmsAdapter.destroyBoss(
+                player,
+                state.bossHandle
+            );
+
+            state.bossHandle = null;
+        }
+
+        if (state.bossHandle == null) {
+            state.bossHandle =
+                nmsAdapter.spawnBoss(
+                    player,
+                    entityType,
+                    nextEntityId(),
+                    location.x,
+                    location.y,
+                    location.z,
+                    health,
+                    title,
+                    invisible
+                );
+
+            return;
+        }
+
+        boolean updated =
+            nmsAdapter.updateBoss(
+                player,
+                state.bossHandle,
+                location.x,
+                location.y,
+                location.z,
+                bossFollowPlayer,
+                health,
+                title,
+                invisible
+            );
+
+        if (!updated) {
+            state.bossHandle = null;
+        }
+    }
+
+    private BossBarLocation computeBossLocation(
+            Player player,
+            String requestedMode,
+            String entityType,
+            boolean invisible,
+            boolean test,
+            double displayedRatio) {
+
+        Location location =
+            player.getLocation();
+
+        String mode =
+            normalizePositionMode(
+                requestedMode
+            );
+
+        if ("AUTO".equals(mode)) {
+
+            if (!test
+                    && hideWitherParticles
+                    && invisible
+                    && "WITHER".equals(entityType)) {
+
+                bossParticleSafePlacements.incrementAndGet();
+
+                /*
+                 * Différence cruciale V3.16.2 :
+                 *
+                 * > armored_threshold :
+                 *   fumée normale seulement -> placement AUTO classique.
+                 *
+                 * <= armored_threshold :
+                 *   le client active isArmored() et crée les particules
+                 *   blanches. L'entité reste devant pour conserver la bossbar,
+                 *   mais descend nettement sous la ligne de vue.
+                 *
+                 * La longueur de la bossbar reste exacte : on ne modifie
+                 * jamais la vie du Wither pour contourner l'état armored.
+                 */
+                if (displayedRatio <= bossArmoredThreshold) {
+                    return frontLocation(
+                        location,
+                        bossArmoredDistance,
+                        bossArmoredVerticalOffset
+                    );
+                }
+
+                return frontLocation(
+                    location,
+                    bossAutoDistance,
+                    bossAutoVerticalOffset
+                );
+            }
+
+            return frontLocation(
+                location,
+                bossForwardOffset,
+                0.0D
+            );
+        }
+
+        if ("FRONT".equals(mode)) {
+            return frontLocation(
+                location,
+                bossForwardOffset,
+                0.0D
+            );
+        }
+
+        if ("FRONT_FAR".equals(mode)) {
+            if (!test
+                    && hideWitherParticles
+                    && invisible
+                    && "WITHER".equals(entityType)) {
+
+                bossParticleSafePlacements.incrementAndGet();
+            }
+
+            return frontLocation(
+                location,
+                bossFrontFarDistance,
+                0.0D
+            );
+        }
+
+        if ("EYE_FRONT".equals(mode)) {
+            Location eye =
+                player.getEyeLocation();
+
+            Vector direction =
+                eye.getDirection();
+
+            if (direction.lengthSquared() < 0.001D) {
+                direction =
+                    new Vector(0D, 0D, 1D);
+            }
+
+            direction.normalize();
+
+            return new BossBarLocation(
+                eye.getX() + direction.getX() * bossForwardOffset,
+                eye.getY() + direction.getY() * bossForwardOffset,
+                eye.getZ() + direction.getZ() * bossForwardOffset
+            );
+        }
+
+        if ("BELOW".equals(mode)) {
+            return new BossBarLocation(
+                location.getX(),
+                location.getY()
+                    - Math.abs(
+                        bossOffsetY == 0D ? 12.0D : bossOffsetY
+                    ),
+                location.getZ()
+            );
+        }
+
+        if ("ABOVE".equals(mode)) {
+            return new BossBarLocation(
+                location.getX(),
+                location.getY()
+                    + Math.abs(
+                        bossOffsetY == 0D ? 12.0D : bossOffsetY
+                    ),
+                location.getZ()
+            );
+        }
+
+        return new BossBarLocation(
+            location.getX(),
+            location.getY() + 1.5D,
+            location.getZ()
+        );
+    }
+
+    /** Stable frontal placement: ignores camera pitch. */
+    private static BossBarLocation frontLocation(
+            Location origin,
+            double distance,
+            double verticalOffset) {
+
+        Vector direction =
+            origin.getDirection();
+
+        direction.setY(0D);
+
+        if (direction.lengthSquared() < 0.001D) {
+            direction =
+                new Vector(0D, 0D, 1D);
+        }
+
+        direction.normalize();
+
+        double safeDistance =
+            Math.max(
+                4.0D,
+                Math.min(60.0D, distance)
+            );
+
+        return new BossBarLocation(
+            origin.getX() + direction.getX() * safeDistance,
+            origin.getY() + 1.5D + verticalOffset,
+            origin.getZ() + direction.getZ() * safeDistance
+        );
     }
 
     private void updateSnapshot(
@@ -1463,7 +1827,9 @@ public final class HudManager {
                 0,
                 Math.min(
                     job.getMaxLevel(),
-                    data.getLevel(job.getId())));
+                    data.getLevel(job.getId())
+                )
+            );
 
         state.snapshotJobId = job.getId();
         state.snapshotLevel = level;
@@ -1477,626 +1843,90 @@ public final class HudManager {
         state.snapshotXp =
             LevelUtil.getCurrentLevelXp(
                 data,
-                job);
+                job
+            );
 
         state.snapshotXpNext =
             LevelUtil.getRequiredXpForNextLevel(
                 data,
-                job);
+                job
+            );
     }
 
-    private void sendActionBar(
-            Player player,
-            String message) {
-
-        if (player == null || !player.isOnline()) {
+    public void removePlayer(Player player) {
+        if (player == null) {
             return;
         }
 
-        try {
-            Class<?> craftPlayerClass =
-                Class.forName(
-                    "org.bukkit.craftbukkit."
-                        + NMS
-                        + ".entity.CraftPlayer");
+        UUID uuid =
+            player.getUniqueId();
 
-            Class<?> packetClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".PacketPlayOutChat");
+        active.remove(uuid);
 
-            Class<?> chatBaseClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".IChatBaseComponent");
+        PlayerHudState state =
+            states.remove(uuid);
 
-            Class<?> chatSerializerClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".IChatBaseComponent$ChatSerializer");
+        if (state != null
+                && state.bossHandle != null) {
 
-            Object chatComponent =
-                chatSerializerClass
-                    .getMethod("a", String.class)
-                    .invoke(
-                        null,
-                        "{\"text\":\""
-                            + escapeJson(
-                                nonNull(message, ""))
-                            + "\"}");
-
-            Object packet =
-                packetClass
-                    .getConstructor(
-                        chatBaseClass,
-                        byte.class)
-                    .newInstance(
-                        chatComponent,
-                        (byte) 2);
-
-            Object handle =
-                craftPlayerClass
-                    .getMethod("getHandle")
-                    .invoke(player);
-
-            Object connection =
-                handle.getClass()
-                    .getField("playerConnection")
-                    .get(handle);
-
-            connection.getClass()
-                .getMethod(
-                    "sendPacket",
-                    Class.forName(
-                        "net.minecraft.server."
-                            + NMS
-                            + ".Packet"))
-                .invoke(connection, packet);
-        } catch (Exception failure) {
-            Throwable cause =
-                unwrap(failure);
-
-            KjobLogger.warn(
-                "[HUD] ActionBar NMS "
-                    + cause.getClass().getSimpleName()
-                    + " : "
-                    + cause.getMessage());
-
-            if (plugin.getConfigManager().isDebugHud()) {
-                cause.printStackTrace();
-            }
+            nmsAdapter.destroyBoss(
+                player,
+                state.bossHandle
+            );
         }
     }
 
-    private void sendTitle(
-            Player player,
-            String title,
-            String subtitle,
-            int fadeIn,
-            int stay,
-            int fadeOut) {
-
-        if (player == null || !player.isOnline()) {
-            return;
-        }
-
-        debugHud(
-            "[HUD-DEBUG] sendTitle -> "
-                + player.getName()
-                + " titre=\"" + title + "\""
-                + " sous-titre=\"" + subtitle + "\"");
-
-        try {
-            Class<?> craftPlayerClass =
-                Class.forName(
-                    "org.bukkit.craftbukkit."
-                        + NMS
-                        + ".entity.CraftPlayer");
-
-            Class<?> craftChatMessageClass =
-                Class.forName(
-                    "org.bukkit.craftbukkit."
-                        + NMS
-                        + ".util.CraftChatMessage");
-
-            Class<?> packetTitleClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".PacketPlayOutTitle");
-
-            Class<?> enumActionClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".PacketPlayOutTitle$EnumTitleAction");
-
-            Class<?> chatBaseClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".IChatBaseComponent");
-
-            Class<?> packetClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".Packet");
-
-            Object handle =
-                craftPlayerClass
-                    .getMethod("getHandle")
-                    .invoke(player);
-
-            Object connection =
-                handle.getClass()
-                    .getField("playerConnection")
-                    .get(handle);
-
-            Method sendPacket =
-                connection.getClass()
-                    .getMethod(
-                        "sendPacket",
-                        packetClass);
-
-            if (plugin.getConfigManager()
-                    .getHudConfig()
-                    .getBoolean(
-                        "achievement.reset_before_send",
-                        true)) {
-
-                Object resetAction =
-                    enumActionClass
-                        .getField("RESET")
-                        .get(null);
-
-                Object resetPacket =
-                    packetTitleClass
-                        .getConstructor(
-                            enumActionClass,
-                            chatBaseClass)
-                        .newInstance(
-                            resetAction,
-                            null);
-
-                sendPacket.invoke(
-                    connection,
-                    resetPacket);
-            }
-
-            Object timesAction =
-                enumActionClass
-                    .getField("TIMES")
-                    .get(null);
-
-            Object timesPacket =
-                packetTitleClass
-                    .getConstructor(
-                        enumActionClass,
-                        chatBaseClass,
-                        int.class,
-                        int.class,
-                        int.class)
-                    .newInstance(
-                        timesAction,
-                        null,
-                        fadeIn,
-                        stay,
-                        fadeOut);
-
-            sendPacket.invoke(
-                connection,
-                timesPacket);
-
-            Object[] titleComponents =
-                (Object[]) craftChatMessageClass
-                    .getMethod(
-                        "fromString",
-                        String.class)
-                    .invoke(
-                        null,
-                        nonNull(title, ""));
-
-            if (titleComponents.length > 0) {
-                Object titleAction =
-                    enumActionClass
-                        .getField("TITLE")
-                        .get(null);
-
-                Object titlePacket =
-                    packetTitleClass
-                        .getConstructor(
-                            enumActionClass,
-                            chatBaseClass,
-                            int.class,
-                            int.class,
-                            int.class)
-                        .newInstance(
-                            titleAction,
-                            titleComponents[0],
-                            fadeIn,
-                            stay,
-                            fadeOut);
-
-                sendPacket.invoke(
-                    connection,
-                    titlePacket);
-            }
-
-            if (subtitle != null
-                    && !subtitle.isEmpty()) {
-
-                Object[] subtitleComponents =
-                    (Object[]) craftChatMessageClass
-                        .getMethod(
-                            "fromString",
-                            String.class)
-                        .invoke(
-                            null,
-                            subtitle);
-
-                if (subtitleComponents.length > 0) {
-                    Object subtitleAction =
-                        enumActionClass
-                            .getField("SUBTITLE")
-                            .get(null);
-
-                    Object subtitlePacket =
-                        packetTitleClass
-                            .getConstructor(
-                                enumActionClass,
-                                chatBaseClass,
-                                int.class,
-                                int.class,
-                                int.class)
-                            .newInstance(
-                                subtitleAction,
-                                subtitleComponents[0],
-                                fadeIn,
-                                stay,
-                                fadeOut);
-
-                    sendPacket.invoke(
-                        connection,
-                        subtitlePacket);
-                }
-            }
-        } catch (Exception failure) {
-            Throwable cause =
-                unwrap(failure);
-
-            KjobLogger.warn(
-                "[HUD] Title NMS "
-                    + cause.getClass().getSimpleName()
-                    + " : "
-                    + cause.getMessage());
-
-            if (plugin.getConfigManager().isDebugHud()) {
-                cause.printStackTrace();
-            }
-        }
-    }
-
-    /**
-     * Bossbar 1.8 basée sur une fausse entité envoyée uniquement au client.
-     */
-    private void sendBossBar(
-            Player player,
-            float progress,
-            String title,
-            PlayerHudState state) {
-
+    public void clearActionBar(Player player) {
         if (player == null
-                || !player.isOnline()
-                || state == null) {
+                || !player.isOnline()) {
+
             return;
         }
 
-        float safeProgress =
-            (float) clamp(progress, 0.0D, 1.0D);
+        PlayerHudState state =
+            states.get(
+                player.getUniqueId()
+            );
 
-        try {
-            Class<?> craftWorldClass =
-                Class.forName(
-                    "org.bukkit.craftbukkit."
-                        + NMS
-                        + ".CraftWorld");
+        if (state != null) {
+            clearActionBarState(state);
+        }
 
-            Class<?> worldServerClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".WorldServer");
+        nmsAdapter.sendActionBar(
+            player,
+            ""
+        );
+    }
 
-            String entityTypeForPacket =
-                state.nmsWither != null
-                        && state.bossEntityType != null
-                    ? state.bossEntityType
-                    : bossEntityType;
+    public void shutdown() {
+        if (updateTask != null) {
+            updateTask.cancel();
+            updateTask = null;
+        }
 
-            float maxHealthForPacket =
-                state.nmsWither != null
-                        && state.bossEntityMaxHealth > 0.0F
-                    ? state.bossEntityMaxHealth
-                    : bossEntityMaxHealth;
+        for (Map.Entry<UUID, PlayerHudState> entry
+                : states.entrySet()) {
 
-            Class<?> entityWitherClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + "."
-                        + bossEntityClassName(
-                            entityTypeForPacket));
+            Player player =
+                Bukkit.getPlayer(entry.getKey());
 
-            Class<?> entityLivingClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".EntityLiving");
+            PlayerHudState state =
+                entry.getValue();
 
-            Class<?> entityClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".Entity");
+            if (player != null
+                    && player.isOnline()
+                    && state != null
+                    && state.bossHandle != null) {
 
-            Class<?> spawnPacketClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".PacketPlayOutSpawnEntityLiving");
-
-            Class<?> metadataPacketClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".PacketPlayOutEntityMetadata");
-
-            Class<?> teleportPacketClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".PacketPlayOutEntityTeleport");
-
-            Class<?> dataWatcherClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".DataWatcher");
-
-            Class<?> craftPlayerClass =
-                Class.forName(
-                    "org.bukkit.craftbukkit."
-                        + NMS
-                        + ".entity.CraftPlayer");
-
-            Class<?> packetClass =
-                Class.forName(
-                    "net.minecraft.server."
-                        + NMS
-                        + ".Packet");
-
-            Object nmsWorld =
-                craftWorldClass
-                    .getMethod("getHandle")
-                    .invoke(player.getWorld());
-
-            float minimumHealth =
-                (float) (
-                    bossMinProgress
-                        * maxHealthForPacket);
-
-            float health =
-                Math.max(
-                    minimumHealth,
-                    safeProgress
-                        * maxHealthForPacket);
-
-            health =
-                Math.max(
-                    1.0F,
-                    Math.min(
-                        maxHealthForPacket,
-                        health));
-
-            BossBarLocation bossLocation =
-                computeBossBarLocation(player);
-
-            if (state.nmsWither == null) {
-                Class<?> worldClass =
-                    worldServerClass.getSuperclass();
-
-                Object wither =
-                    entityWitherClass
-                        .getConstructor(worldClass)
-                        .newInstance(nmsWorld);
-
-                int customId =
-                    nextFakeEntityId();
-
-                entityWitherClass
-                    .getMethod("d", int.class)
-                    .invoke(wither, customId);
-
-                entityWitherClass
-                    .getMethod(
-                        "setPosition",
-                        double.class,
-                        double.class,
-                        double.class)
-                    .invoke(
-                        wither,
-                        bossLocation.x,
-                        bossLocation.y,
-                        bossLocation.z);
-
-                applyBossBarVisibility(wither);
-
-                entityWitherClass
-                    .getMethod(
-                        "setCustomName",
-                        String.class)
-                    .invoke(
-                        wither,
-                        nonNull(title, ""));
-
-                entityWitherClass
-                    .getMethod(
-                        "setHealth",
-                        float.class)
-                    .invoke(
-                        wither,
-                        health);
-
-                state.nmsWither = wither;
-                state.bossBarEntityId = customId;
-                state.bossEntityType =
-                    entityTypeForPacket;
-                state.bossEntityMaxHealth =
-                    maxHealthForPacket;
-
-                Object spawnPacket =
-                    spawnPacketClass
-                        .getConstructor(
-                            entityLivingClass)
-                        .newInstance(wither);
-
-                debugHud(
-                    "[HUD-DEBUG] BossBar spawn pour "
-                        + player.getName()
-                        + " entityId=" + customId
-                        + " health=" + health
-                        + "/" + maxHealthForPacket
-                        + " pos=" + bossLocation
-                        + " mode=" + bossPositionMode
-                        + " titre=\"" + title + "\"");
-
-                sendPacketTo(
+                nmsAdapter.destroyBoss(
                     player,
-                    spawnPacket,
-                    craftPlayerClass,
-                    packetClass);
-
-                Method getDataWatcher =
-                    findMethod(
-                        wither.getClass(),
-                        "getDataWatcher");
-
-                if (getDataWatcher != null) {
-                    Object dataWatcher =
-                        getDataWatcher.invoke(wither);
-
-                    Object metadataPacket =
-                        metadataPacketClass
-                            .getConstructor(
-                                int.class,
-                                dataWatcherClass,
-                                boolean.class)
-                            .newInstance(
-                                customId,
-                                dataWatcher,
-                                true);
-
-                    sendPacketTo(
-                        player,
-                        metadataPacket,
-                        craftPlayerClass,
-                        packetClass);
-                }
-            } else {
-                if (bossFollowPlayer) {
-                    entityWitherClass
-                        .getMethod(
-                            "setPosition",
-                            double.class,
-                            double.class,
-                            double.class)
-                        .invoke(
-                            state.nmsWither,
-                            bossLocation.x,
-                            bossLocation.y,
-                            bossLocation.z);
-
-                    Object teleportPacket =
-                        teleportPacketClass
-                            .getConstructor(
-                                entityClass)
-                            .newInstance(
-                                state.nmsWither);
-
-                    sendPacketTo(
-                        player,
-                        teleportPacket,
-                        craftPlayerClass,
-                        packetClass);
-                }
-
-                entityWitherClass
-                    .getMethod(
-                        "setHealth",
-                        float.class)
-                    .invoke(
-                        state.nmsWither,
-                        health);
-
-                entityWitherClass
-                    .getMethod(
-                        "setCustomName",
-                        String.class)
-                    .invoke(
-                        state.nmsWither,
-                        nonNull(title, ""));
-
-                applyBossBarVisibility(
-                    state.nmsWither);
-
-                Method getDataWatcher =
-                    findMethod(
-                        state.nmsWither.getClass(),
-                        "getDataWatcher");
-
-                if (getDataWatcher == null) {
-                    return;
-                }
-
-                Object dataWatcher =
-                    getDataWatcher.invoke(
-                        state.nmsWither);
-
-                Object metadataPacket =
-                    metadataPacketClass
-                        .getConstructor(
-                            int.class,
-                            dataWatcherClass,
-                            boolean.class)
-                        .newInstance(
-                            state.bossBarEntityId,
-                            dataWatcher,
-                            true);
-
-                sendPacketTo(
-                    player,
-                    metadataPacket,
-                    craftPlayerClass,
-                    packetClass);
-            }
-        } catch (Exception failure) {
-            Throwable cause =
-                unwrap(failure);
-
-            KjobLogger.warn(
-                "[HUD] BossBar NMS "
-                    + cause.getClass().getSimpleName()
-                    + " : "
-                    + cause.getMessage());
-
-            if (plugin.getConfigManager().isDebugHud()) {
-                cause.printStackTrace();
+                    state.bossHandle
+                );
             }
         }
+
+        active.clear();
+        states.clear();
     }
 
     private void hideBossBar(
@@ -2104,347 +1934,189 @@ public final class HudManager {
             PlayerHudState state) {
 
         if (state == null
-                || state.bossBarEntityId == -1) {
+                || state.bossHandle == null) {
+
             return;
         }
 
-        try {
-            if (player != null
-                    && player.isOnline()) {
+        nmsAdapter.destroyBoss(
+            player,
+            state.bossHandle
+        );
 
-                Class<?> destroyPacketClass =
-                    Class.forName(
-                        "net.minecraft.server."
-                            + NMS
-                            + ".PacketPlayOutEntityDestroy");
-
-                Class<?> craftPlayerClass =
-                    Class.forName(
-                        "org.bukkit.craftbukkit."
-                            + NMS
-                            + ".entity.CraftPlayer");
-
-                Class<?> packetClass =
-                    Class.forName(
-                        "net.minecraft.server."
-                            + NMS
-                            + ".Packet");
-
-                Object destroyPacket =
-                    destroyPacketClass
-                        .getConstructor(int[].class)
-                        .newInstance(
-                            (Object) new int[] {
-                                state.bossBarEntityId
-                            });
-
-                sendPacketTo(
-                    player,
-                    destroyPacket,
-                    craftPlayerClass,
-                    packetClass);
-            }
-        } catch (Exception failure) {
-            KjobLogger.warn(
-                "[HUD] BossBar destroy NMS "
-                    + failure.getClass().getSimpleName()
-                    + " : "
-                    + failure.getMessage());
-        } finally {
-            resetBossBarState(state);
-        }
+        state.bossHandle = null;
+        state.lastBossRefreshMs = 0L;
     }
 
-    private void resetBossBarState(
+    private void clearActionBarState(
             PlayerHudState state) {
 
-        state.bossBarEntityId = -1;
-        state.nmsWither = null;
-        state.bossEntityType = null;
-        state.bossEntityMaxHealth = 0.0F;
-        state.testBossBarUntilMs = 0L;
-        state.lastBossBarRefreshMs = 0L;
+        state.accumulatingJobId = null;
+        state.accumulatedXp = 0;
+        state.windowStartMs = 0L;
+        state.cachedActionBarMsg = null;
+        state.displayUntilMs = 0L;
+        state.lastActionBarSendMs = 0L;
     }
 
-    private void sendPacketTo(
-            Player player,
-            Object packet,
-            Class<?> craftPlayerClass,
-            Class<?> packetClass)
-            throws Exception {
+    private void clearTestState(
+            PlayerHudState state) {
 
-        Object handle =
-            craftPlayerClass
-                .getMethod("getHandle")
-                .invoke(player);
-
-        Object connection =
-            handle.getClass()
-                .getField("playerConnection")
-                .get(handle);
-
-        connection.getClass()
-            .getMethod(
-                "sendPacket",
-                packetClass)
-            .invoke(connection, packet);
-    }
-
-    private BossBarLocation computeBossBarLocation(
-            Player player) {
-
-        Location location =
-            player.getLocation();
-
-        String mode =
-            normalizeBossPositionMode(
-                bossPositionMode);
-
-        if ("FRONT".equals(mode)) {
-            double distance =
-                bossForwardOffset != 0.0D
-                    ? bossForwardOffset
-                    : 24.0D;
-
-            Vector direction =
-                location.getDirection();
-
-            direction.setY(0.0D);
-
-            if (direction.lengthSquared() < 0.001D) {
-                direction =
-                    new Vector(0.0D, 0.0D, 1.0D);
-            }
-
-            direction.normalize();
-
-            return new BossBarLocation(
-                location.getX()
-                    + direction.getX()
-                    * distance,
-                location.getY() + 1.5D,
-                location.getZ()
-                    + direction.getZ()
-                    * distance);
-        }
-
-        if ("EYE_FRONT".equals(mode)) {
-            Location eye =
-                player.getEyeLocation();
-
-            double distance =
-                bossForwardOffset != 0.0D
-                    ? bossForwardOffset
-                    : 24.0D;
-
-            Vector direction =
-                eye.getDirection();
-
-            if (direction.lengthSquared() < 0.001D) {
-                direction =
-                    new Vector(0.0D, 0.0D, 1.0D);
-            }
-
-            direction.normalize();
-
-            return new BossBarLocation(
-                eye.getX()
-                    + direction.getX()
-                    * distance,
-                eye.getY()
-                    + direction.getY()
-                    * distance,
-                eye.getZ()
-                    + direction.getZ()
-                    * distance);
-        }
-
-        double x = location.getX();
-        double y;
-        double z = location.getZ();
-
-        if ("PLAYER".equals(mode)) {
-            y = location.getY();
-        } else if ("ABOVE".equals(mode)) {
-            double offset =
-                bossOffsetY == 0.0D
-                    ? 30.0D
-                    : Math.abs(bossOffsetY);
-
-            y = location.getY() + offset;
-        } else {
-            y = location.getY() + bossOffsetY;
-        }
-
-        if (bossForwardOffset != 0.0D) {
-            Vector direction =
-                location.getDirection();
-
-            x += direction.getX()
-                * bossForwardOffset;
-
-            y += direction.getY()
-                * bossForwardOffset;
-
-            z += direction.getZ()
-                * bossForwardOffset;
-        }
-
-        return new BossBarLocation(x, y, z);
-    }
-
-    private void applyBossBarVisibility(
-            Object wither) {
-
-        try {
-            wither.getClass()
-                .getMethod(
-                    "setInvisible",
-                    boolean.class)
-                .invoke(
-                    wither,
-                    bossInvisibleEntity);
-        } catch (Exception failure) {
-            if (bossInvisibleEntity) {
-                debugHud(
-                    "[HUD-DEBUG] setInvisible indisponible : "
-                        + failure.getClass()
-                            .getSimpleName()
-                        + " "
-                        + failure.getMessage());
-            }
-        }
-    }
-
-    private String bossEntityClassName(
-            String entityType) {
-
-        return "ENDER_DRAGON".equals(entityType)
-            ? "EntityEnderDragon"
-            : "EntityWither";
-    }
-
-    private String normalizeBossEntityType(
-            String value) {
-
-        String normalized =
-            value == null
-                ? "WITHER"
-                : value.trim()
-                    .toUpperCase()
-                    .replace('-', '_');
-
-        if ("DRAGON".equals(normalized)) {
-            normalized = "ENDER_DRAGON";
-        }
-
-        if (!"WITHER".equals(normalized)
-                && !"ENDER_DRAGON".equals(
-                    normalized)) {
-
-            KjobLogger.warn(
-                "[HUD] bossbar.entity_type invalide : "
-                    + value
-                    + " - fallback WITHER");
-
-            return "WITHER";
-        }
-
-        return normalized;
-    }
-
-    private String normalizeBossPositionMode(
-            String value) {
-
-        String normalized =
-            value == null
-                ? "FRONT"
-                : value.trim()
-                    .toUpperCase()
-                    .replace('-', '_');
-
-        if ("EYEFRONT".equals(normalized)) {
-            normalized = "EYE_FRONT";
-        }
-
-        if ("UNDER".equals(normalized)
-                || "DOWN".equals(normalized)) {
-            normalized = "BELOW";
-        }
-
-        if ("UP".equals(normalized)) {
-            normalized = "ABOVE";
-        }
-
-        if (!"BELOW".equals(normalized)
-                && !"ABOVE".equals(normalized)
-                && !"FRONT".equals(normalized)
-                && !"EYE_FRONT".equals(normalized)
-                && !"PLAYER".equals(normalized)) {
-
-            KjobLogger.warn(
-                "[HUD] bossbar.position_mode invalide : "
-                    + value
-                    + " - fallback FRONT");
-
-            return "FRONT";
-        }
-
-        return normalized;
-    }
-
-    private float defaultMaxHealthFor(
-            String entityType) {
-
-        return "ENDER_DRAGON".equals(
-                normalizeBossEntityType(entityType))
-            ? 200.0F
-            : 300.0F;
+        state.testBossUntilMs = 0L;
+        state.testEntityType = null;
+        state.testPositionMode = null;
+        state.testInvisible = false;
     }
 
     private PlayerHudState getOrCreateState(
             UUID uuid) {
 
-        PlayerHudState existing =
+        PlayerHudState state =
             states.get(uuid);
 
-        if (existing != null) {
-            return existing;
+        if (state != null) {
+            return state;
         }
 
         PlayerHudState created =
             new PlayerHudState();
 
-        PlayerHudState concurrent =
+        PlayerHudState existing =
             states.putIfAbsent(
                 uuid,
-                created);
+                created
+            );
 
-        return concurrent == null
+        return existing == null
             ? created
-            : concurrent;
+            : existing;
     }
 
-    private static int calculatePercent(
-            int currentLevel,
-            int maxLevel,
-            int currentXp,
-            int requiredXp) {
+    private void activate(UUID uuid) {
+        if (uuid != null) {
+            active.put(
+                uuid,
+                Boolean.TRUE
+            );
+        }
+    }
 
-        if (currentLevel >= maxLevel) {
-            return 100;
+    private static String normalizeEntityType(
+            String raw) {
+
+        String value =
+            raw == null
+                ? "WITHER"
+                : raw.trim()
+                    .toUpperCase()
+                    .replace('-', '_');
+
+        if ("DRAGON".equals(value)) {
+            value = "ENDER_DRAGON";
         }
 
-        if (requiredXp <= 0) {
+        return "ENDER_DRAGON".equals(value)
+            ? "ENDER_DRAGON"
+            : "WITHER";
+    }
+
+    private static String normalizePositionMode(
+            String raw) {
+
+        String value =
+            raw == null
+                ? "AUTO"
+                : raw.trim()
+                    .toUpperCase()
+                    .replace('-', '_');
+
+        if ("EYEFRONT".equals(value)) {
+            value = "EYE_FRONT";
+        }
+
+        if ("FRONTFAR".equals(value)
+                || "FAR".equals(value)) {
+
+            value = "FRONT_FAR";
+        }
+
+        if ("UNDER".equals(value)
+                || "DOWN".equals(value)) {
+
+            value = "BELOW";
+        }
+
+        if ("UP".equals(value)) {
+            value = "ABOVE";
+        }
+
+        if (!"AUTO".equals(value)
+                && !"FRONT".equals(value)
+                && !"FRONT_FAR".equals(value)
+                && !"BELOW".equals(value)
+                && !"ABOVE".equals(value)
+                && !"EYE_FRONT".equals(value)
+                && !"PLAYER".equals(value)) {
+
+            return "AUTO";
+        }
+
+        return value;
+    }
+
+    private static float defaultMaxHealth(
+            String entityType) {
+
+        return "ENDER_DRAGON".equals(
+                normalizeEntityType(entityType)
+            )
+            ? 200.0F
+            : 300.0F;
+    }
+
+    private static int nextEntityId() {
+        int id =
+            FAKE_ENTITY_COUNTER.getAndIncrement();
+
+        if (id <= 0
+                || id >= Integer.MAX_VALUE - 1000) {
+
+            FAKE_ENTITY_COUNTER.set(800_001);
+            return 800_000;
+        }
+
+        return id;
+    }
+
+    private static int saturatingAdd(
+            int first,
+            int second) {
+
+        long result =
+            (long) first + (long) second;
+
+        if (result >= Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+
+        if (result <= 0L) {
             return 0;
         }
 
-        double ratio =
-            (double) Math.max(0, currentXp)
-                / (double) requiredXp;
+        return (int) result;
+    }
 
-        if (Double.isNaN(ratio)
-                || Double.isInfinite(ratio)) {
+    private static int percent(
+            int level,
+            int maxLevel,
+            int xp,
+            int required) {
+
+        if (level >= maxLevel) {
+            return 100;
+        }
+
+        if (required <= 0) {
             return 0;
         }
 
@@ -2453,69 +2125,12 @@ public final class HudManager {
             Math.min(
                 100,
                 (int) Math.floor(
-                    ratio * 100.0D)));
-    }
-
-    private static int saturatingAdd(
-            int first,
-            int second) {
-
-        long total =
-            (long) first + (long) second;
-
-        if (total >= Integer.MAX_VALUE) {
-            return Integer.MAX_VALUE;
-        }
-
-        if (total <= 0L) {
-            return 0;
-        }
-
-        return (int) total;
-    }
-
-    private static int nextFakeEntityId() {
-        int id =
-            FAKE_ENTITY_COUNTER.getAndIncrement();
-
-        /*
-         * Protection théorique après une très longue durée de vie du serveur.
-         * La plage repart à une valeur élevée positive.
-         */
-        if (id <= 0
-                || id >= Integer.MAX_VALUE - 1000) {
-
-            FAKE_ENTITY_COUNTER.compareAndSet(
-                id + 1,
-                800_000);
-
-            return 800_000;
-        }
-
-        return id;
-    }
-
-    private static long secondsToMillis(
-            long seconds) {
-
-        return safeMultiply(
-            Math.max(0L, seconds),
-            1000L);
-    }
-
-    private static long safeMultiply(
-            long value,
-            long multiplier) {
-
-        if (value <= 0L || multiplier <= 0L) {
-            return 0L;
-        }
-
-        if (value > Long.MAX_VALUE / multiplier) {
-            return Long.MAX_VALUE;
-        }
-
-        return value * multiplier;
+                    ((double) Math.max(0, xp)
+                        / (double) required)
+                        * 100D
+                )
+            )
+        );
     }
 
     private static double clamp(
@@ -2529,123 +2144,55 @@ public final class HudManager {
 
         return Math.max(
             minimum,
-            Math.min(maximum, value));
+            Math.min(
+                maximum,
+                value
+            )
+        );
     }
 
-    private static String escapeJson(
-            String text) {
+    private static long secondsToMillis(
+            long seconds) {
 
-        String value =
-            nonNull(text, "");
+        long safe =
+            Math.max(0L, seconds);
 
-        StringBuilder escaped =
-            new StringBuilder(
-                value.length() + 16);
-
-        for (int index = 0;
-                index < value.length();
-                index++) {
-
-            char character =
-                value.charAt(index);
-
-            switch (character) {
-                case '\\':
-                    escaped.append("\\\\");
-                    break;
-                case '"':
-                    escaped.append("\\\"");
-                    break;
-                case '\n':
-                    escaped.append("\\n");
-                    break;
-                case '\r':
-                    escaped.append("\\r");
-                    break;
-                case '\t':
-                    escaped.append("\\t");
-                    break;
-                default:
-                    if (character < 0x20) {
-                        escaped.append(
-                            String.format(
-                                "\\u%04x",
-                                (int) character));
-                    } else {
-                        escaped.append(character);
-                    }
-                    break;
-            }
+        if (safe > Long.MAX_VALUE / 1000L) {
+            return Long.MAX_VALUE;
         }
 
-        return escaped.toString();
+        return safe * 1000L;
     }
 
-    private static String colorize(
-            String text) {
-
-        return nonNull(text, "")
+    private static String color(String text) {
+        return value(text)
             .replace('&', '§');
     }
 
-    private void debugHud(
-            String message) {
-
-        if (plugin.getConfigManager()
-                .isDebugHud()) {
-
-            KjobLogger.info(message);
-        }
+    private static String value(String text) {
+        return text == null ? "" : text;
     }
 
-    private static Throwable unwrap(
-            Exception failure) {
+    private static void updateMax(
+            AtomicLong target,
+            long value) {
 
-        if (failure
-                instanceof InvocationTargetException
-                && failure.getCause() != null) {
+        while (true) {
+            long previous =
+                target.get();
 
-            return failure.getCause();
-        }
-
-        return failure;
-    }
-
-    private static String nonNull(
-            String value,
-            String fallback) {
-
-        return value == null
-            ? fallback
-            : value;
-    }
-
-    /**
-     * Cherche une méthode sans paramètre en remontant la hiérarchie.
-     */
-    private static Method findMethod(
-            Class<?> start,
-            String name) {
-
-        Class<?> type = start;
-
-        while (type != null) {
-            for (Method method
-                    : type.getDeclaredMethods()) {
-
-                if (method.getName().equals(name)
-                        && method.getParameterTypes().length
-                            == 0) {
-
-                    method.setAccessible(true);
-                    return method;
-                }
+            if (value <= previous) {
+                return;
             }
 
-            type = type.getSuperclass();
-        }
+            if (target.compareAndSet(
+                    previous,
+                    value
+                )) {
 
-        return null;
+                return;
+            }
+        }
     }
 
     private static final class BossBarLocation {
@@ -2663,50 +2210,36 @@ public final class HudManager {
             this.y = y;
             this.z = z;
         }
-
-        @Override
-        public String toString() {
-            return "x=" + round(x)
-                + ",y=" + round(y)
-                + ",z=" + round(z);
-        }
-
-        private static double round(
-                double value) {
-
-            return Math.round(
-                value * 10.0D)
-                / 10.0D;
-        }
     }
 
     private static final class PlayerHudState {
 
-        // Accumulation actionbar.
+        // ActionBar.
         private String accumulatingJobId;
         private int accumulatedXp;
         private long windowStartMs;
-        private long lastXpMs;
-
-        // Affichage actionbar.
         private String cachedActionBarMsg;
         private long displayUntilMs;
+        private long lastActionBarSendMs;
 
-        // Snapshot de progression.
+        // Snapshot.
         private String snapshotJobId;
         private int snapshotLevel;
         private int snapshotXp;
         private int snapshotXpNext;
+        private long lastXpMs;
 
-        // Bossbar.
-        private Object nmsWither;
-        private int bossBarEntityId = -1;
-        private String bossEntityType;
-        private float bossEntityMaxHealth;
-        private long lastBossBarRefreshMs;
-        private long testBossBarUntilMs;
+        // BossBar.
+        private HudNmsAdapter.BossHandle bossHandle;
+        private long lastBossRefreshMs;
 
-        // Popup de niveau.
+        // Test.
+        private long testBossUntilMs;
+        private String testEntityType;
+        private String testPositionMode;
+        private boolean testInvisible;
+
+        // Popup.
         private long lastPopupMs;
     }
 }
