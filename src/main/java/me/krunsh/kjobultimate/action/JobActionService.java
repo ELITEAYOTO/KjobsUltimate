@@ -1,12 +1,15 @@
 package me.krunsh.kjobultimate.action;
 
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.bukkit.entity.Player;
+
 import me.krunsh.kjobultimate.KjobUltimate;
 import me.krunsh.kjobultimate.data.PlayerData;
 import me.krunsh.kjobultimate.hooks.HookManager;
 import me.krunsh.kjobultimate.jobs.JobDefinition;
 import me.krunsh.kjobultimate.jobs.LevelUpResult;
 import me.krunsh.kjobultimate.util.KjobLogger;
-import org.bukkit.entity.Player;
 
 /**
  * Accounting central des actions de métier.
@@ -17,12 +20,21 @@ import org.bukkit.entity.Player;
  * - HUD ;
  * - progression de quête.
  *
- * Les listeners restent responsables de la détection spécifique :
- * maturité, Silk Touch, bloc, entité, recette, cooldown de position, etc.
+ * V3.16 ajoute des compteurs O(1) pour /kjobs perf.
  */
 public final class JobActionService {
 
     private final KjobUltimate plugin;
+
+    private final AtomicLong attempts = new AtomicLong();
+    private final AtomicLong applied = new AtomicLong();
+    private final AtomicLong unitsApplied = new AtomicLong();
+    private final AtomicLong xpActual = new AtomicLong();
+    private final AtomicLong forcedRejected = new AtomicLong();
+    private final AtomicLong inactiveRejected = new AtomicLong();
+    private final AtomicLong capRejected = new AtomicLong();
+    private final AtomicLong totalNanos = new AtomicLong();
+    private final AtomicLong maxNanos = new AtomicLong();
 
     public JobActionService(
             KjobUltimate plugin) {
@@ -76,112 +88,137 @@ public final class JobActionService {
             return false;
         }
 
-        if (forced
-                && !reward.isAllowForced()) {
+        attempts.incrementAndGet();
 
-            if (plugin.getConfigManager().isDebugXp()) {
-                KjobLogger.info(
-                    "[Action] Craft forcé ignoré pour "
-                        + player.getName()
-                        + "/"
-                        + job.getId()
-                );
+        long start =
+            System.nanoTime();
+
+        try {
+            if (forced
+                    && !reward.isAllowForced()) {
+
+                forcedRejected.incrementAndGet();
+
+                if (plugin.getConfigManager().isDebugXp()) {
+                    KjobLogger.info(
+                        "[Action] Craft forcé ignoré pour "
+                            + player.getName()
+                            + "/"
+                            + job.getId()
+                    );
+                }
+
+                return false;
             }
 
-            return false;
-        }
-
-        if (!plugin.getSlotManager()
-                .isJobActive(
-                    data,
-                    job.getId()
-                )) {
-
-            return false;
-        }
-
-        int baseXp =
-            saturatingMultiply(
-                Math.max(
-                    0,
-                    reward.getXp()
-                ),
-                units
-            );
-
-        LevelUpResult result =
-            plugin.getXpManager()
-                .addXP(
-                    player,
-                    data,
-                    job.getId(),
-                    baseXp
-                );
-
-        /*
-         * V3.14 : on ne pré-vérifie plus deux fois le daily cap.
-         * XpManager reste la source de vérité. Si aucune XP n'a été attribuée,
-         * on ne fait un check supplémentaire que pour distinguer un cap atteint
-         * d'un niveau max / multiplicateur à 0.
-         */
-        if (reward.getXp() > 0
-                && result.getXpActual() <= 0
-                && !result.isAtMaxLevel()
-                && plugin.getXpManager()
-                    .isDailyCapReached(
+            if (!plugin.getSlotManager()
+                    .isJobActive(
                         data,
                         job.getId()
                     )) {
 
-            sendDailyCapMessage(
-                player,
-                job
-            );
+                inactiveRejected.incrementAndGet();
+                return false;
+            }
 
-            return false;
-        }
-
-        depositMoney(
-            player,
-            reward,
-            units
-        );
-
-        if (result.isLeveledUp()) {
-            plugin.getXpManager()
-                .handleLevelUp(
-                    player,
-                    data,
-                    job.getId(),
-                    result
-                );
-        }
-
-        if (plugin.getHudManager() != null) {
-            plugin.getHudManager()
-                .onXpGain(
-                    player,
-                    data,
-                    job.getId(),
-                    result.getXpActual(),
-                    result
-                );
-        }
-
-        if (plugin.getQuestManager() != null
-                && questType != null
-                && !questType.trim().isEmpty()) {
-
-            plugin.getQuestManager()
-                .progress(
-                    player,
-                    questType,
-                    questTarget,
+            int baseXp =
+                saturatingMultiply(
+                    Math.max(
+                        0,
+                        reward.getXp()
+                    ),
                     units
                 );
-        }
 
-        return true;
+            LevelUpResult result =
+                plugin.getXpManager()
+                    .addXP(
+                        player,
+                        data,
+                        job.getId(),
+                        baseXp
+                    );
+
+            if (reward.getXp() > 0
+                    && result.getXpActual() <= 0
+                    && !result.isAtMaxLevel()
+                    && plugin.getXpManager()
+                        .isDailyCapReached(
+                            data,
+                            job.getId()
+                        )) {
+
+                capRejected.incrementAndGet();
+
+                sendDailyCapMessage(
+                    player,
+                    job
+                );
+
+                return false;
+            }
+
+            depositMoney(
+                player,
+                reward,
+                units
+            );
+
+            if (result.isLeveledUp()) {
+                plugin.getXpManager()
+                    .handleLevelUp(
+                        player,
+                        data,
+                        job.getId(),
+                        result
+                    );
+            }
+
+            if (plugin.getHudManager() != null) {
+                plugin.getHudManager()
+                    .onXpGain(
+                        player,
+                        data,
+                        job.getId(),
+                        result.getXpActual(),
+                        result
+                    );
+            }
+
+            if (plugin.getQuestManager() != null
+                    && questType != null
+                    && !questType.trim().isEmpty()) {
+
+                plugin.getQuestManager()
+                    .progress(
+                        player,
+                        questType,
+                        questTarget,
+                        units
+                    );
+            }
+
+            applied.incrementAndGet();
+            unitsApplied.addAndGet(units);
+            xpActual.addAndGet(
+                Math.max(
+                    0,
+                    result.getXpActual()
+                )
+            );
+
+            return true;
+
+        } finally {
+            long elapsed =
+                Math.max(
+                    0L,
+                    System.nanoTime() - start
+                );
+
+            totalNanos.addAndGet(elapsed);
+            updateMax(maxNanos, elapsed);
+        }
     }
 
     private void depositMoney(
@@ -243,9 +280,71 @@ public final class JobActionService {
                 );
 
         if (!message.isEmpty()) {
-            player.sendMessage(
-                message
-            );
+            player.sendMessage(message);
+        }
+    }
+
+    public long getAttempts() {
+        return attempts.get();
+    }
+
+    public long getApplied() {
+        return applied.get();
+    }
+
+    public long getUnitsApplied() {
+        return unitsApplied.get();
+    }
+
+    public long getXpActualTotal() {
+        return xpActual.get();
+    }
+
+    public long getForcedRejected() {
+        return forcedRejected.get();
+    }
+
+    public long getInactiveRejected() {
+        return inactiveRejected.get();
+    }
+
+    public long getCapRejected() {
+        return capRejected.get();
+    }
+
+    public double getAverageMillis() {
+        long count = attempts.get();
+
+        if (count <= 0L) {
+            return 0D;
+        }
+
+        return (totalNanos.get() / 1_000_000D) / count;
+    }
+
+    public double getMaxMillis() {
+        return maxNanos.get() / 1_000_000D;
+    }
+
+    private static void updateMax(
+            AtomicLong target,
+            long value) {
+
+        while (true) {
+            long previous =
+                target.get();
+
+            if (value <= previous) {
+                return;
+            }
+
+            if (target.compareAndSet(
+                    previous,
+                    value
+                )) {
+
+                return;
+            }
         }
     }
 
