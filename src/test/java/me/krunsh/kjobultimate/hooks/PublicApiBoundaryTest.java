@@ -74,6 +74,18 @@ public class PublicApiBoundaryTest {
             )
         );
 
+        assertFalse(
+            all.contains(
+                "import me.krunsh.kcraft."
+            )
+        );
+
+        assertFalse(
+            all.contains(
+                "import me.krunsh.kstacker."
+            )
+        );
+
         assertTrue(
             all.contains(
                 "import me.krunsh.kgui.api.KguiApi"
@@ -85,6 +97,22 @@ public class PublicApiBoundaryTest {
                 "import me.krunsh.kfaction.api.v2.KfactionApis"
             )
         );
+    }
+
+    @Test
+    public void buildHasNoMachineLocalSystemDependencies()
+            throws Exception {
+
+        String pom =
+            new String(
+                Files.readAllBytes(
+                    Paths.get("pom.xml")
+                ),
+                StandardCharsets.UTF_8
+            );
+
+        assertFalse(pom.contains("<scope>system</scope>"));
+        assertFalse(pom.contains("<systemPath>"));
     }
 
     @Test

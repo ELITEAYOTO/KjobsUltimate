@@ -8,7 +8,8 @@
 # - aucune compatibilite d'ancienne config
 # - XP / money / quete utilisent le meme accounting V3.13+
 #
-# Les variantes MATERIAL:data restent supportees par le code si besoin.
+# Résolution Kminerai : KMINERAI:id, KMINERAI_DROP:id réellement tiré,
+# MATERIAL:data, puis MATERIAL. Une seule récompense est appliquée.
 
 display_name: "§bMineur"
 description: "§7Extrait les ressources de la terre et des profondeurs."

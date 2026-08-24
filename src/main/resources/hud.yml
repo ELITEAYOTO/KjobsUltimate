@@ -1,11 +1,8 @@
 # KjobsUltimate V3.16.2 — HUD
 #
-# IMPORTANT 1.8.8 :
-# - au-dessus de 50 % de vie, le faux Wither produit surtout sa fumée normale ;
-# - à 50 % ou moins, le client active l'état ARMORED et génère également les
-#   particules blanches visibles sur la V3.16.1.
-#
-# AUTO possède donc deux placements distincts sans fausser la barre.
+# IMPORTANT 1.8.8 : le faux Wither génère côté client une aura blanche sous
+# 50 % de vie. Aucun réglage serveur ne peut la couper sans fausser la longueur
+# de la bossbar. Le Dragon invisible évite totalement cet effet.
 
 performance:
   scheduler_interval_ticks: 2
@@ -19,8 +16,8 @@ bossbar:
   title_format: "&a{job} &7Lv.&e{level} &8| &a{xp}&8/&a{xp_next} &7XP"
   title_format_max_level: "&a{job} &7Lv.&e{level} &8| &6&lMAX"
 
-  entity_type: WITHER
-  max_health: 300.0
+  entity_type: ENDER_DRAGON
+  max_health: 200.0
   minimum_progress: 0.05
 
   invisible_entity: true
@@ -37,7 +34,13 @@ bossbar:
     # FRONT_FAR.
     front_far_distance: 40.0
 
-    # AUTO quand la barre est AU-DESSUS du seuil armored.
+    # Dragon AUTO : le client 1.8 fabrique la bossbar a partir de cette fausse
+    # entite. Elle reste devant mais tres loin sous le joueur afin que son
+    # modele ne soit jamais visible, meme une seule image au spawn.
+    dragon_distance: 30.0
+    dragon_vertical_offset: -100.0
+
+    # Wither AUTO quand la barre est AU-DESSUS du seuil armored.
     auto_distance: 36.0
     auto_vertical_offset: -7.0
 
@@ -57,7 +60,10 @@ bossbar:
 
 actionbar:
   enabled: true
-  format: "&a{job} &7Lv.&e{level} &8| &a+{xp_gained} XP &8(&7{xp}&8/&7{xp_next}&8)"
+  format: "&a{job} &7Lv.&e{level} &8| &a+{xp_gained} XP &8(&7{xp}&8/&7{xp_next}&8){autosell_suffix}"
+  autosell_suffix: " &8| &6+{autosell_value}$ &7({autosell_items} objets)"
+  autosell_only_format: "&6AutoSell &8| &a+{autosell_value}$ &7({autosell_items} objets)"
+  currency_decimals: 2
   display_duration: 3
   accumulation_window_ms: 800
 

@@ -1,6 +1,9 @@
 package me.krunsh.kjobultimate.hooks;
 
-import me.krunsh.kcraft.api.events.KcraftPostCraftEvent;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Method;
+
 import me.krunsh.kjobultimate.KjobUltimate;
 import me.krunsh.kjobultimate.action.CraftUnitResolver;
 import me.krunsh.kjobultimate.data.PlayerData;
@@ -10,13 +13,16 @@ import me.krunsh.kjobultimate.util.KjobLogger;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
+import org.bukkit.event.Event;
+import org.bukkit.event.EventException;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.EventExecutor;
+import org.bukkit.plugin.Plugin;
 
 /**
- * Hook Kcraft V3.13.
+ * Hook Kcraft V3.13 sans dépendance compile-time sur le plugin.
  *
  * Ordre de résolution Artisan :
  * 1. action exacte "KCRAFT:<craftId>" ;
@@ -27,6 +33,9 @@ import org.bukkit.inventory.ItemStack;
  */
 public final class KcraftHook implements Listener {
 
+    private static final String EVENT_CLASS =
+        "me.krunsh.kcraft.api.events.KcraftPostCraftEvent";
+
     private static final String ARTISAN_JOB_ID =
         "artisan";
 
@@ -34,6 +43,12 @@ public final class KcraftHook implements Listener {
         "pilleur";
 
     private final KjobUltimate plugin;
+    private MethodHandle getPlayer;
+    private MethodHandle getResult;
+    private MethodHandle getCraftId;
+    private MethodHandle isSuccess;
+    private MethodHandle wasForced;
+    private boolean failureLogged;
 
     public KcraftHook(
             KjobUltimate plugin) {
@@ -42,35 +57,104 @@ public final class KcraftHook implements Listener {
             plugin;
     }
 
-    public void register() {
-
-        plugin.getServer()
+    public boolean register() {
+        Plugin target = plugin.getServer()
             .getPluginManager()
-            .registerEvents(
-                this,
-                plugin
-            );
+            .getPlugin("Kcraft");
 
-        KjobLogger.info(
-            "Kcraft hook enregistre - listener KcraftPostCraftEvent V3.13 actif."
-        );
-    }
-
-    @EventHandler(
-        priority = EventPriority.MONITOR,
-        ignoreCancelled = false
-    )
-    public void onKcraftPost(
-            KcraftPostCraftEvent event) {
-
-        if (event == null
-                || !event.isSuccess()) {
-
-            return;
+        if (target == null || !target.isEnabled()) {
+            return false;
         }
 
-        Player player =
-            event.getPlayer();
+        try {
+            Class<?> raw = Class.forName(
+                EVENT_CLASS,
+                false,
+                target.getClass().getClassLoader()
+            );
+
+            if (!Event.class.isAssignableFrom(raw)) {
+                throw new IllegalStateException(
+                    "le contrat n'est pas un Event Bukkit"
+                );
+            }
+
+            MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+            getPlayer = handle(lookup, raw, "getPlayer");
+            getResult = handle(lookup, raw, "getResult");
+            getCraftId = handle(lookup, raw, "getCraftId");
+            isSuccess = handle(lookup, raw, "isSuccess");
+            wasForced = handle(lookup, raw, "wasForced");
+
+            @SuppressWarnings("unchecked")
+            Class<? extends Event> eventClass =
+                (Class<? extends Event>) raw;
+
+            plugin.getServer()
+                .getPluginManager()
+                .registerEvent(
+                    eventClass,
+                    this,
+                    EventPriority.MONITOR,
+                    new EventExecutor() {
+                        @Override
+                        public void execute(
+                                Listener listener,
+                                Event event)
+                                throws EventException {
+
+                            onKcraftPost(event);
+                        }
+                    },
+                    plugin,
+                    false
+                );
+
+            return true;
+        } catch (Throwable failure) {
+            warnOnce(failure);
+            return false;
+        }
+    }
+
+    public void onKcraftPost(
+            Event event) {
+
+        try {
+            if (event == null
+                    || !Boolean.TRUE.equals(
+                        isSuccess.invoke(event)
+                    )) {
+
+                return;
+            }
+
+            Player player =
+                (Player) getPlayer.invoke(event);
+            ItemStack craftResult =
+                (ItemStack) getResult.invoke(event);
+            String craftId =
+                (String) getCraftId.invoke(event);
+            boolean forced = Boolean.TRUE.equals(
+                wasForced.invoke(event)
+            );
+
+            handleCraft(
+                player,
+                craftResult,
+                craftId,
+                forced
+            );
+        } catch (Throwable failure) {
+            warnOnce(failure);
+        }
+    }
+
+    private void handleCraft(
+            Player player,
+            ItemStack craftResult,
+            String craftId,
+            boolean forced) {
 
         if (player == null
                 || player.getGameMode() == GameMode.CREATIVE
@@ -78,9 +162,6 @@ public final class KcraftHook implements Listener {
 
             return;
         }
-
-        ItemStack craftResult =
-            event.getResult();
 
         if (craftResult == null
                 || craftResult.getType() == null
@@ -92,14 +173,38 @@ public final class KcraftHook implements Listener {
         handleArtisanCraft(
             player,
             craftResult,
-            event.getCraftId(),
-            event.wasForced()
+            craftId,
+            forced
         );
 
         handlePilleurDynamiteCraft(
             player,
             craftResult,
-            event.wasForced()
+            forced
+        );
+    }
+
+    private static MethodHandle handle(
+            MethodHandles.Lookup lookup,
+            Class<?> owner,
+            String name) throws IllegalAccessException,
+            NoSuchMethodException {
+
+        Method method = owner.getMethod(name);
+        return lookup.unreflect(method);
+    }
+
+    private void warnOnce(Throwable failure) {
+        if (failureLogged) {
+            return;
+        }
+
+        failureLogged = true;
+        KjobLogger.warn(
+            "Hook Kcraft inactif : "
+                + failure.getClass().getSimpleName()
+                + ": "
+                + String.valueOf(failure.getMessage())
         );
     }
 

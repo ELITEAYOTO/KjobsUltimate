@@ -50,6 +50,8 @@ public final class HudNmsAdapter {
     private Method entitySetCustomName;
     private Method entitySetInvisible;
     private Method entityGetDataWatcher;
+    private Method dataWatcherGetByte;
+    private Method dataWatcherWatch;
     private Method entityLivingSetHealth;
     private Method witherSetInvul;
 
@@ -213,6 +215,17 @@ public final class HudNmsAdapter {
 
             entityGetDataWatcher =
                 method(entityClass, "getDataWatcher");
+
+            dataWatcherGetByte =
+                method(dataWatcherClass, "getByte", int.class);
+
+            dataWatcherWatch =
+                method(
+                    dataWatcherClass,
+                    "watch",
+                    int.class,
+                    Object.class
+                );
 
             entityLivingSetHealth =
                 method(entityLivingClass, "setHealth", float.class);
@@ -475,6 +488,30 @@ public final class HudNmsAdapter {
         }
 
         entitySetInvisible.invoke(entity, invisible);
+
+        /*
+         * La bossbar 1.8 repose sur une fausse entite client-side. On force
+         * aussi le bit d'invisibilite dans sa DataWatcher avant le paquet de
+         * spawn : le Dragon ne doit jamais dependre de l'ordre spawn/metadata.
+         */
+        Object watcher =
+            entityGetDataWatcher.invoke(entity);
+
+        byte flags =
+            ((Byte) dataWatcherGetByte.invoke(watcher, 0)).byteValue();
+
+        byte expected =
+            invisible
+                ? (byte) (flags | 0x20)
+                : (byte) (flags & ~0x20);
+
+        if (flags != expected) {
+            dataWatcherWatch.invoke(
+                watcher,
+                0,
+                Byte.valueOf(expected)
+            );
+        }
 
         entitySetCustomName.invoke(
             entity,

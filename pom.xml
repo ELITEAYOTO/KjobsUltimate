@@ -31,6 +31,10 @@
             <id>codemc-repo</id>
             <url>https://repo.codemc.io/repository/maven-public/</url>
         </repository>
+        <repository>
+            <id>placeholderapi</id>
+            <url>https://repo.helpch.at/releases/</url>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -54,9 +58,8 @@
         <dependency>
             <groupId>me.clip</groupId>
             <artifactId>placeholderapi</artifactId>
-            <version>2.11.3</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/PlaceholderAPI-2.11.3.jar</systemPath>
+            <version>2.11.6</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Kgui V2 est une dÃ©pendance runtime obligatoire de KjobsUltimate V3. -->
@@ -67,23 +70,7 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Kcraft (KcraftPostCraftEvent) -->
-        <dependency>
-            <groupId>me.krunsh</groupId>
-            <artifactId>kcraft</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/../Kcraft/target/Kcraft-1.0.0.jar</systemPath>
-        </dependency>
-
-        <!-- Kstacker (META_KILL_MULTIPLIER, StackedMobRegistry) -->
-        <dependency>
-            <groupId>me.krunsh</groupId>
-            <artifactId>KStacker</artifactId>
-            <version>1.0.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/../Kstacker/target/KStacker-1.0.0.jar</systemPath>
-        </dependency>
+        <!-- Kcraft et KStacker sont des hooks runtime optionnels. -->
 
         <!-- Contrat public Kfaction 2.3 uniquement. -->
         <dependency>
@@ -164,7 +151,7 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <createDependencyReducedPom>true</createDependencyReducedPom>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
                             <minimizeJar>false</minimizeJar>
                             <relocations>
                                 <!-- SQLite JDBC relocalisé pour éviter conflits -->
@@ -177,7 +164,27 @@
                                     <pattern>de.tr7zw.changeme.nbtapi</pattern>
                                     <shadedPattern>me.krunsh.kjobultimate.nbtapi</shadedPattern>
                                 </relocation>
+                                <relocation>
+                                    <pattern>com.mysql</pattern>
+                                    <shadedPattern>me.krunsh.kjobultimate.libs.mysql</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.google.protobuf</pattern>
+                                    <shadedPattern>me.krunsh.kjobultimate.libs.protobuf</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.zaxxer.hikari</pattern>
+                                    <shadedPattern>me.krunsh.kjobultimate.libs.hikari</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.slf4j</pattern>
+                                    <shadedPattern>me.krunsh.kjobultimate.libs.slf4j</shadedPattern>
+                                </relocation>
                             </relocations>
+                            <transformers>
+                                <!-- Conserve les deux déclarations de pilotes JDBC. -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                            </transformers>
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
@@ -185,6 +192,10 @@
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <exclude>META-INF/maven/**</exclude>
+                                        <exclude>LICENSE</exclude>
+                                        <exclude>LICENSE.txt</exclude>
                                         <!-- Java 9+/Graal metadata inutile sur le runtime Java 8. -->
                                         <exclude>META-INF/versions/**</exclude>
                                     </excludes>

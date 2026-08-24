@@ -235,11 +235,13 @@ public final class HookManager implements Listener, AutoCloseable {
         kcraftHook =
             new KcraftHook(plugin);
 
-        kcraftHook.register();
-
-        KjobLogger.success(
-            "Kcraft connecté — listener KcraftPostCraftEvent actif."
-        );
+        if (kcraftHook.register()) {
+            KjobLogger.success(
+                "Kcraft connecté — listener KcraftPostCraftEvent actif."
+            );
+        } else {
+            kcraftHook = null;
+        }
     }
 
     private void setupKfaction() {
@@ -305,11 +307,13 @@ public final class HookManager implements Listener, AutoCloseable {
         kstackerHook =
             new KstackerHook(plugin);
 
-        kstackerHook.register();
-
-        KjobLogger.success(
-            "KStacker connecté — multiplicateur kill actif."
-        );
+        if (kstackerHook.register()) {
+            KjobLogger.success(
+                "KStacker connecté — multiplicateur kill actif."
+            );
+        } else {
+            kstackerHook = null;
+        }
     }
 
     // -------------------------------------------------------------------------

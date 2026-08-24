@@ -85,6 +85,20 @@ décrits dans les documents de conception.
 | MySQL/Hikari réel | Compile uniquement ; aucune base MySQL réelle validée |
 | Intégration KStacker | API `StackKillResult` explicite ; seules les metadata appartenant à KStacker sont acceptées |
 
+## Contrats inter-plugins Volkaria
+
+- Kminerai publie une casse réellement terminée via `CustomOreMinedEvent`.
+  Mineur résout `KMINERAI:<oreId>`, puis
+  `KMINERAI_DROP:<actualDropId>`, puis le matériau vanilla. Une seule voie
+  applique XP, argent, HUD, quête, Silk Touch et anti-farm.
+- Kenchantement publie un `AutoSellActionEvent` par action logique. Kjobs
+  agrège le nombre d'objets et la valeur dans son ActionBar existante ; aucun
+  second HUD n'est envoyé.
+- Kcraft et KStacker restent optionnels et sont liés à leur contrat public au
+  démarrage. Le build ne dépend d'aucun JAR placé dans un dossier voisin.
+- Kgui reste la seule dépendance runtime obligatoire et Kfaction est consommé
+  uniquement par son API publique.
+
 ## Décisions Techniques Actées
 
 | Décision | Choix | Raison |
