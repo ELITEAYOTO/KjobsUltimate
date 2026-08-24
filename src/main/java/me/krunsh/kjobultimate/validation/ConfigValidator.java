@@ -1261,6 +1261,7 @@ public final class ConfigValidator {
     /**
      * Accepte :
      * - une action spÃ©ciale ;
+     * - une identité KMINERAI:<oreId> ou KMINERAI_DROP:<dropId> ;
      * - un Material ;
      * - un Material avec data value, par exemple STONE:3 ;
      * - un EntityType.
@@ -1283,6 +1284,10 @@ public final class ConfigValidator {
             return true;
         }
 
+        if (isKmineraiActionKey(key)) {
+            return true;
+        }
+
         if (Material.matchMaterial(key) != null) {
             return true;
         }
@@ -1300,6 +1305,21 @@ public final class ConfigValidator {
         } catch (IllegalArgumentException ignored) {
             return false;
         }
+    }
+
+    private boolean isKmineraiActionKey(String key) {
+        String identity;
+
+        if (key.startsWith("KMINERAI:")) {
+            identity = key.substring("KMINERAI:".length());
+        } else if (key.startsWith("KMINERAI_DROP:")) {
+            identity = key.substring("KMINERAI_DROP:".length());
+        } else {
+            return false;
+        }
+
+        return !identity.isEmpty()
+            && identity.matches("[A-Z0-9_./]+");
     }
 
     private boolean isKnownQuestTarget(

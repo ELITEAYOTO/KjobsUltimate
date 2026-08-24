@@ -5,12 +5,15 @@ import java.util.UUID;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import me.krunsh.kjobultimate.action.JobActionService;
+import me.krunsh.kjobultimate.action.MiningActionService;
 import me.krunsh.kjobultimate.commands.KjobAdminCommand;
 import me.krunsh.kjobultimate.commands.KjobAdminRouter;
 import me.krunsh.kjobultimate.config.ConfigManager;
 import me.krunsh.kjobultimate.data.DatabaseManager;
 import me.krunsh.kjobultimate.data.PlayerDataManager;
 import me.krunsh.kjobultimate.hooks.HookManager;
+import me.krunsh.kjobultimate.hooks.AutoSellHudBridge;
+import me.krunsh.kjobultimate.hooks.KmineraiJobBridge;
 import me.krunsh.kjobultimate.hud.HudManager;
 import me.krunsh.kjobultimate.jobs.JobRegistry;
 import me.krunsh.kjobultimate.jobs.XpManager;
@@ -48,6 +51,7 @@ public final class KjobUltimate extends JavaPlugin {
     private XpManager xpManager;
     private SlotManager slotManager;
     private JobActionService jobActionService;
+    private MiningActionService miningActionService;
     private BlockCooldownService blockCooldownService;
     private UiInvalidationQueue uiInvalidationQueue;
     private QuestWriteBuffer questWriteBuffer;
@@ -98,6 +102,9 @@ public final class KjobUltimate extends JavaPlugin {
 
             jobActionService =
                 new JobActionService(this);
+
+            miningActionService =
+                new MiningActionService(this);
 
             blockCooldownService =
                 new BlockCooldownService(this);
@@ -305,6 +312,9 @@ public final class KjobUltimate extends JavaPlugin {
                 new me.krunsh.kjobultimate.listeners.quests.QuestActionListener(this),
                 this
             );
+
+        new KmineraiJobBridge(this).register();
+        new AutoSellHudBridge(this).register();
     }
 
     private void registerCommands() {
@@ -368,6 +378,10 @@ public final class KjobUltimate extends JavaPlugin {
 
     public JobActionService getJobActionService() {
         return jobActionService;
+    }
+
+    public MiningActionService getMiningActionService() {
+        return miningActionService;
     }
 
     public BlockCooldownService getBlockCooldownService() {

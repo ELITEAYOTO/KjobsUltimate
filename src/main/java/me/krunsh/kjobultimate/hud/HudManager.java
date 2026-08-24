@@ -1,6 +1,7 @@
 package me.krunsh.kjobultimate.hud;
 
 import java.util.Map;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -59,6 +60,8 @@ public final class HudManager {
     private double bossOffsetY;
     private double bossForwardOffset;
     private double bossFrontFarDistance;
+    private double bossDragonDistance;
+    private double bossDragonVerticalOffset;
     private double bossAutoDistance;
     private double bossAutoVerticalOffset;
     private double bossArmoredDistance;
@@ -80,6 +83,9 @@ public final class HudManager {
     // ActionBar.
     private boolean abEnabled;
     private String abFormat;
+    private String abAutoSellSuffix;
+    private String abAutoSellOnlyFormat;
+    private int abCurrencyDecimals;
     private long abDisplayMs;
     private long abAccumulationWindowMs;
     private long abRefreshMs;
@@ -116,6 +122,12 @@ public final class HudManager {
                 + ") - NMS cache="
                 + (nmsAdapter.isAvailable() ? "ON" : "OFF")
                 + ", active-only=ON"
+                + ", bossbar="
+                + bossEntityType
+                + "@packet"
+                + ("ENDER_DRAGON".equals(bossEntityType)
+                    ? "(" + bossDragonDistance + "m/y" + bossDragonVerticalOffset + ")"
+                    : "")
                 + ", wither-particles="
                 + (hideWitherParticles ? "SAFE" : "LEGACY")
                 + "."
@@ -285,6 +297,32 @@ public final class HudManager {
                 60.0D
             );
 
+        /*
+         * Le Dragon 1.8 est une entite uniquement envoyee par paquets. Meme
+         * invisible, son immense modele peut apparaitre une frame si le
+         * client recoit le spawn avant la metadata. Le garder loin et sous le
+         * joueur rend ce cas imperceptible sans perdre la bossbar.
+         */
+        bossDragonDistance =
+            clamp(
+                cfg.getDouble(
+                    "bossbar.placement.dragon_distance",
+                    30.0D
+                ),
+                8.0D,
+                60.0D
+            );
+
+        bossDragonVerticalOffset =
+            clamp(
+                cfg.getDouble(
+                    "bossbar.placement.dragon_vertical_offset",
+                    -100.0D
+                ),
+                -160.0D,
+                -32.0D
+            );
+
         bossAutoDistance =
             clamp(
                 cfg.getDouble(
@@ -374,7 +412,7 @@ public final class HudManager {
             normalizeEntityType(
                 cfg.getString(
                     "bossbar.entity_type",
-                    "WITHER"
+                    "ENDER_DRAGON"
                 )
             );
 
@@ -434,6 +472,37 @@ public final class HudManager {
                     "&a{job} &7Lv.&e{level} &8| "
                         + "&a+{xp_gained} XP "
                         + "&8(&7{xp}&8/&7{xp_next}&8)"
+                        + "{autosell_suffix}"
+                )
+            );
+
+        abAutoSellSuffix =
+            value(
+                cfg.getString(
+                    "actionbar.autosell_suffix",
+                    " &8| &6+{autosell_value}$ "
+                        + "&7({autosell_items} objets)"
+                )
+            );
+
+        abAutoSellOnlyFormat =
+            value(
+                cfg.getString(
+                    "actionbar.autosell_only_format",
+                    "&6AutoSell &8| &a+{autosell_value}$ "
+                        + "&7({autosell_items} objets)"
+                )
+            );
+
+        abCurrencyDecimals =
+            Math.max(
+                0,
+                Math.min(
+                    4,
+                    cfg.getInt(
+                        "actionbar.currency_decimals",
+                        2
+                    )
                 )
             );
 
@@ -619,8 +688,9 @@ public final class HudManager {
                 && data.isActionBarHudEnabled()) {
 
             boolean jobChanged =
-                !job.getId()
-                    .equals(state.accumulatingJobId);
+                state.accumulatingJobId != null
+                    && !job.getId()
+                        .equals(state.accumulatingJobId);
 
             boolean windowExpired =
                 state.windowStartMs > 0L
@@ -629,14 +699,13 @@ public final class HudManager {
 
             boolean newWindow =
                 state.windowStartMs <= 0L
-                    || state.accumulatedXp <= 0;
+                    || !hasPendingActionBar(state);
 
             if (jobChanged
                     || windowExpired
                     || newWindow) {
 
-                if (state.accumulatedXp > 0
-                        && state.accumulatingJobId != null) {
+                if (hasPendingActionBar(state)) {
 
                     flushActionBar(
                         player,
@@ -645,10 +714,15 @@ public final class HudManager {
                     );
                 }
 
-                state.accumulatedXp = 0;
+                clearPendingActionBar(state);
                 state.accumulatingJobId =
                     job.getId();
                 state.windowStartMs = now;
+            }
+
+            if (state.accumulatingJobId == null) {
+                state.accumulatingJobId =
+                    job.getId();
             }
 
             state.accumulatedXp =
@@ -669,6 +743,70 @@ public final class HudManager {
             job,
             state
         );
+
+        activate(uuid);
+    }
+
+    /**
+     * Gain AutoSell déjà déposé et agrégé par action logique. Cette méthode
+     * ne touche jamais à l'économie et ne produit aucune seconde ActionBar.
+     */
+    public void onAutoSellGain(
+            Player player,
+            long soldItems,
+            double soldValue) {
+
+        if (player == null
+                || !player.isOnline()
+                || soldItems <= 0L
+                || soldValue <= 0D
+                || Double.isNaN(soldValue)
+                || Double.isInfinite(soldValue)
+                || !abEnabled) {
+
+            return;
+        }
+
+        PlayerData data =
+            plugin.getPlayerDataManager()
+                .get(player);
+
+        if (data == null
+                || !data.isHudEnabled()
+                || !data.isActionBarHudEnabled()) {
+
+            return;
+        }
+
+        UUID uuid = player.getUniqueId();
+        PlayerHudState state = getOrCreateState(uuid);
+        long now = System.currentTimeMillis();
+
+        boolean windowExpired =
+            state.windowStartMs > 0L
+                && now - state.windowStartMs
+                    > abAccumulationWindowMs;
+
+        if (windowExpired && hasPendingActionBar(state)) {
+            flushActionBar(player, data, state);
+            clearPendingActionBar(state);
+        }
+
+        if (state.windowStartMs <= 0L) {
+            state.windowStartMs = now;
+        }
+
+        state.accumulatedSoldItems =
+            saturatingAdd(
+                state.accumulatedSoldItems,
+                soldItems
+            );
+
+        state.accumulatedSoldValue =
+            saturatingAddMoney(
+                state.accumulatedSoldValue,
+                soldValue
+            );
 
         activate(uuid);
     }
@@ -1243,8 +1381,7 @@ public final class HudManager {
                 if (abEnabled
                         && data.isActionBarHudEnabled()) {
 
-                    if (state.accumulatedXp > 0
-                            && state.accumulatingJobId != null
+                    if (hasPendingActionBar(state)
                             && now - state.windowStartMs
                                 >= abAccumulationWindowMs) {
 
@@ -1254,8 +1391,7 @@ public final class HudManager {
                             state
                         );
 
-                        state.accumulatedXp = 0;
-                        state.windowStartMs = 0L;
+                        clearPendingActionBar(state);
                     }
 
                     if (state.cachedActionBarMsg != null) {
@@ -1284,7 +1420,7 @@ public final class HudManager {
                         }
                     }
 
-                    if (state.accumulatedXp > 0) {
+                    if (hasPendingActionBar(state)) {
                         keepActive = true;
                     }
                 } else {
@@ -1343,7 +1479,7 @@ public final class HudManager {
 
                 if (!keepActive
                         && state.testBossUntilMs <= 0L
-                        && state.accumulatedXp <= 0
+                        && !hasPendingActionBar(state)
                         && state.cachedActionBarMsg == null
                         && state.bossHandle == null) {
 
@@ -1373,40 +1509,77 @@ public final class HudManager {
 
         if (player == null
                 || !player.isOnline()
-                || state.accumulatingJobId == null) {
+                || state == null
+                || !hasPendingActionBar(state)) {
 
             return;
         }
+
+        String saleValue =
+            formatMoney(state.accumulatedSoldValue);
+        String saleItems =
+            String.valueOf(
+                Math.max(0L, state.accumulatedSoldItems)
+            );
+
+        String saleSuffix =
+            state.accumulatedSoldItems <= 0L
+                || state.accumulatedSoldValue <= 0D
+                    ? ""
+                    : abAutoSellSuffix
+                        .replace(
+                            "{autosell_value}",
+                            saleValue
+                        )
+                        .replace(
+                            "{autosell_items}",
+                            saleItems
+                        );
 
         JobDefinition job =
-            plugin.getJobRegistry()
-                .getJob(state.accumulatingJobId);
+            state.accumulatingJobId == null
+                ? null
+                : plugin.getJobRegistry()
+                    .getJob(state.accumulatingJobId);
+
+        String rawMessage;
 
         if (job == null) {
-            clearActionBarState(state);
-            return;
-        }
+            if (saleSuffix.isEmpty()) {
+                return;
+            }
 
-        if (!job.getId()
-                .equals(state.snapshotJobId)) {
+            rawMessage =
+                abAutoSellOnlyFormat
+                    .replace(
+                        "{autosell_value}",
+                        saleValue
+                    )
+                    .replace(
+                        "{autosell_items}",
+                        saleItems
+                    );
 
-            updateSnapshot(
-                data,
-                job,
-                state
-            );
-        }
+        } else {
+            if (!job.getId()
+                    .equals(state.snapshotJobId)) {
 
-        int percentage =
-            percent(
-                state.snapshotLevel,
-                job.getMaxLevel(),
-                state.snapshotXp,
-                state.snapshotXpNext
-            );
+                updateSnapshot(
+                    data,
+                    job,
+                    state
+                );
+            }
 
-        String message =
-            color(
+            int percentage =
+                percent(
+                    state.snapshotLevel,
+                    job.getMaxLevel(),
+                    state.snapshotXp,
+                    state.snapshotXpNext
+                );
+
+            rawMessage =
                 abFormat
                     .replace(
                         "{job}",
@@ -1443,7 +1616,21 @@ public final class HudManager {
                         "{percent}",
                         String.valueOf(percentage)
                     )
-            );
+                    .replace(
+                        "{autosell_suffix}",
+                        saleSuffix
+                    )
+                    .replace(
+                        "{autosell_value}",
+                        saleValue
+                    )
+                    .replace(
+                        "{autosell_items}",
+                        saleItems
+                    );
+        }
+
+        String message = color(rawMessage);
 
         long now =
             System.currentTimeMillis();
@@ -1668,6 +1855,16 @@ public final class HudManager {
             );
 
         if ("AUTO".equals(mode)) {
+
+            if (invisible
+                    && "ENDER_DRAGON".equals(entityType)) {
+
+                return frontLocation(
+                    location,
+                    bossDragonDistance,
+                    bossDragonVerticalOffset
+                );
+            }
 
             if (!test
                     && hideWitherParticles
@@ -1951,12 +2148,33 @@ public final class HudManager {
     private void clearActionBarState(
             PlayerHudState state) {
 
-        state.accumulatingJobId = null;
-        state.accumulatedXp = 0;
-        state.windowStartMs = 0L;
+        clearPendingActionBar(state);
         state.cachedActionBarMsg = null;
         state.displayUntilMs = 0L;
         state.lastActionBarSendMs = 0L;
+    }
+
+    private void clearPendingActionBar(
+            PlayerHudState state) {
+
+        if (state == null) {
+            return;
+        }
+
+        state.accumulatingJobId = null;
+        state.accumulatedXp = 0;
+        state.accumulatedSoldItems = 0L;
+        state.accumulatedSoldValue = 0D;
+        state.windowStartMs = 0L;
+    }
+
+    private static boolean hasPendingActionBar(
+            PlayerHudState state) {
+
+        return state != null
+            && (state.accumulatedXp > 0
+                || (state.accumulatedSoldItems > 0L
+                    && state.accumulatedSoldValue > 0D));
     }
 
     private void clearTestState(
@@ -2006,7 +2224,7 @@ public final class HudManager {
 
         String value =
             raw == null
-                ? "WITHER"
+                ? "ENDER_DRAGON"
                 : raw.trim()
                     .toUpperCase()
                     .replace('-', '_');
@@ -2015,9 +2233,9 @@ public final class HudManager {
             value = "ENDER_DRAGON";
         }
 
-        return "ENDER_DRAGON".equals(value)
-            ? "ENDER_DRAGON"
-            : "WITHER";
+        return "WITHER".equals(value)
+            ? "WITHER"
+            : "ENDER_DRAGON";
     }
 
     private static String normalizePositionMode(
@@ -2104,6 +2322,46 @@ public final class HudManager {
         }
 
         return (int) result;
+    }
+
+    private static long saturatingAdd(
+            long first,
+            long second) {
+
+        if (second > 0L
+                && first > Long.MAX_VALUE - second) {
+
+            return Long.MAX_VALUE;
+        }
+
+        return first + second;
+    }
+
+    private static double saturatingAddMoney(
+            double first,
+            double second) {
+
+        double result = first + second;
+
+        return Double.isNaN(result)
+                || Double.isInfinite(result)
+            ? Double.MAX_VALUE
+            : result;
+    }
+
+    private String formatMoney(double amount) {
+        double safe =
+            Double.isNaN(amount)
+                    || Double.isInfinite(amount)
+                    || amount < 0D
+                ? 0D
+                : amount;
+
+        return String.format(
+            Locale.US,
+            "%." + abCurrencyDecimals + "f",
+            safe
+        );
     }
 
     private static int percent(
@@ -2217,6 +2475,8 @@ public final class HudManager {
         // ActionBar.
         private String accumulatingJobId;
         private int accumulatedXp;
+        private long accumulatedSoldItems;
+        private double accumulatedSoldValue;
         private long windowStartMs;
         private String cachedActionBarMsg;
         private long displayUntilMs;
