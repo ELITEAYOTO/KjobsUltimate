@@ -392,6 +392,7 @@ public final class HudNmsAdapter {
             double y,
             double z,
             boolean teleport,
+            boolean updateMetadata,
             float health,
             String title,
             boolean invisible) {
@@ -419,19 +420,21 @@ public final class HudNmsAdapter {
                 bossTeleportPackets.incrementAndGet();
             }
 
-            applyCommonBossState(
-                handle.entity,
-                handle.entityType,
-                health,
-                title,
-                invisible
-            );
+            if (updateMetadata) {
+                applyCommonBossState(
+                    handle.entity,
+                    handle.entityType,
+                    health,
+                    title,
+                    invisible
+                );
 
-            sendMetadata(
-                player,
-                handle.entityId,
-                handle.entity
-            );
+                sendMetadata(
+                    player,
+                    handle.entityId,
+                    handle.entity
+                );
+            }
 
             return true;
 

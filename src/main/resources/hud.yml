@@ -1,8 +1,10 @@
-# KjobsUltimate V3.16.2 — HUD
+# KjobsUltimate V3.16.3 — HUD
 #
 # IMPORTANT 1.8.8 : le faux Wither génère côté client une aura blanche sous
 # 50 % de vie. Aucun réglage serveur ne peut la couper sans fausser la longueur
-# de la bossbar. Le Dragon invisible évite totalement cet effet.
+# de la bossbar. Le moteur utilise donc un faux Dragon envoyé uniquement au
+# joueur. Son modèle n'obéit pas au drapeau invisible en 1.8 : il est caché
+# sous le monde par une hauteur absolue sûre.
 
 performance:
   scheduler_interval_ticks: 2
@@ -20,6 +22,8 @@ bossbar:
   max_health: 200.0
   minimum_progress: 0.05
 
+  # Utile au Wither et conservé dans les métadonnées. En 1.8, ce drapeau seul
+  # ne masque PAS le modèle du Dragon ; dragon_absolute_y assure ce rôle.
   invisible_entity: true
   follow_player: true
   hide_wither_particles: true
@@ -34,11 +38,13 @@ bossbar:
     # FRONT_FAR.
     front_far_distance: 40.0
 
-    # Dragon AUTO : le client 1.8 fabrique la bossbar a partir de cette fausse
-    # entite. Elle reste devant mais tres loin sous le joueur afin que son
-    # modele ne soit jamais visible, meme une seule image au spawn.
-    dragon_distance: 30.0
-    dragon_vertical_offset: -100.0
+    # Dragon AUTO : ancre absolue sous le monde normal. La valeur est limitée
+    # par sécurité entre -62 et -16, car le client supprime l'entité sous -64.
+    dragon_absolute_y: -60.0
+
+    # Le Dragon reste proche en X/Z sans être téléporté à chaque actualisation.
+    # À 12 blocs parcourus, un seul paquet de recentrage est envoyé.
+    dragon_reanchor_distance: 12.0
 
     # Wither AUTO quand la barre est AU-DESSUS du seuil armored.
     auto_distance: 36.0

@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 public final class HudConfigCompletenessTest {
 
     @Test
-    public void dragonBossBarIsInvisibleAndSafelyPlaced() throws Exception {
+    public void dragonBossBarUsesUnambiguousBelowWorldAnchor() throws Exception {
         InputStream stream =
             HudConfigCompletenessTest.class
                 .getClassLoader()
@@ -32,14 +32,20 @@ public final class HudConfigCompletenessTest {
             yaml.getBoolean("bossbar.invisible_entity")
         );
         Assert.assertEquals(
-            30.0D,
-            yaml.getDouble("bossbar.placement.dragon_distance"),
+            -60.0D,
+            yaml.getDouble("bossbar.placement.dragon_absolute_y"),
             0.001D
         );
         Assert.assertEquals(
-            -100.0D,
-            yaml.getDouble("bossbar.placement.dragon_vertical_offset"),
+            12.0D,
+            yaml.getDouble("bossbar.placement.dragon_reanchor_distance"),
             0.001D
+        );
+        Assert.assertFalse(
+            yaml.isSet("bossbar.placement.dragon_distance")
+        );
+        Assert.assertFalse(
+            yaml.isSet("bossbar.placement.dragon_vertical_offset")
         );
         Assert.assertTrue(
             yaml.getString("actionbar.format")

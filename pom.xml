@@ -6,11 +6,11 @@
 
     <groupId>me.krunsh</groupId>
     <artifactId>kjobsultimate</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>3.16.3</version>
     <packaging>jar</packaging>
 
     <name>KjobsUltimate</name>
-    <description>Système de jobs complet pour SparrowMC (KhopeSpigot 1.8.8)</description>
+    <description>Système de métiers Volkaria pour KHopeSpigot 1.8.8</description>
 
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
