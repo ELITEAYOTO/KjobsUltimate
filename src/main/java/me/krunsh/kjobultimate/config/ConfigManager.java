@@ -12,7 +12,7 @@ import me.krunsh.kjobultimate.util.KjobLogger;
 /**
  * Charge et expose les YAML de KjobsUltimate.
  *
- * V3.16.2 : les options hot-path restent snapshotées et le QuestWriteBuffer
+ * V3.16.3 : les options hot-path restent snapshotées et le QuestWriteBuffer
  * recharge également ses réglages de persistance lors de /kjobs reload.
  */
 public final class ConfigManager {
@@ -64,7 +64,7 @@ public final class ConfigManager {
         plugin.clearViewCaches();
 
         KjobLogger.info(
-            "Configs rechargees (main + messages + sounds + hud + runtime V3.16.2)");
+            "Configs rechargees (main + messages + sounds + hud + runtime V3.16.3)");
     }
 
     private FileConfiguration loadOrCreate(String fileName) {

@@ -23,7 +23,7 @@ import me.krunsh.kjobultimate.util.KjobLogger;
 import me.krunsh.kjobultimate.util.LevelUtil;
 
 /**
- * HUD V3.16.2.
+ * HUD V3.16.3.
  *
  * Performance :
  * - NMS/reflexion mis en cache dans HudNmsAdapter ;
@@ -60,8 +60,9 @@ public final class HudManager {
     private double bossOffsetY;
     private double bossForwardOffset;
     private double bossFrontFarDistance;
-    private double bossDragonDistance;
-    private double bossDragonVerticalOffset;
+    private double bossDragonAbsoluteY;
+    private double bossDragonReanchorDistance;
+    private boolean bossLegacyDragonPlacementMigrated;
     private double bossAutoDistance;
     private double bossAutoVerticalOffset;
     private double bossArmoredDistance;
@@ -117,7 +118,7 @@ public final class HudManager {
         startUpdateTask();
 
         KjobLogger.success(
-            "HudManager V3.16.2 actif ("
+            "HudManager V3.16.3 actif ("
                 + nmsAdapter.getNms()
                 + ") - NMS cache="
                 + (nmsAdapter.isAvailable() ? "ON" : "OFF")
@@ -126,7 +127,10 @@ public final class HudManager {
                 + bossEntityType
                 + "@packet"
                 + ("ENDER_DRAGON".equals(bossEntityType)
-                    ? "(" + bossDragonDistance + "m/y" + bossDragonVerticalOffset + ")"
+                    ? "(Y=" + bossDragonAbsoluteY
+                        + ", reanchor="
+                        + bossDragonReanchorDistance
+                        + "m)"
                     : "")
                 + ", wither-particles="
                 + (hideWitherParticles ? "SAFE" : "LEGACY")
@@ -298,29 +302,30 @@ public final class HudManager {
             );
 
         /*
-         * Le Dragon 1.8 est une entite uniquement envoyee par paquets. Meme
-         * invisible, son immense modele peut apparaitre une frame si le
-         * client recoit le spawn avant la metadata. Le garder loin et sous le
-         * joueur rend ce cas imperceptible sans perdre la bossbar.
+         * RenderDragon 1.8 ne respecte pas le drapeau d'invisibilite pour le
+         * modele. Une hauteur relative est donc ambigue : visible quand le
+         * joueur vole haut, ou detruite par le client quand il est pres du
+         * sol. AUTO utilise une ancre Y absolue, sous le monde normal mais
+         * au-dessus de la limite client -64. Le Dragon 16x8 ignore le frustum
+         * et conserve environ 853 blocs de portée : Y=-60 reste dans la portée
+         * même pour un joueur à la hauteur maximale vanilla.
          */
-        bossDragonDistance =
-            clamp(
+        bossDragonAbsoluteY =
+            BossBarPlacementPolicy.clampAbsoluteY(
                 cfg.getDouble(
-                    "bossbar.placement.dragon_distance",
-                    30.0D
-                ),
-                8.0D,
-                60.0D
+                    "bossbar.placement.dragon_absolute_y",
+                    BossBarPlacementPolicy.DEFAULT_ABSOLUTE_Y
+                )
             );
 
-        bossDragonVerticalOffset =
+        bossDragonReanchorDistance =
             clamp(
                 cfg.getDouble(
-                    "bossbar.placement.dragon_vertical_offset",
-                    -100.0D
+                    "bossbar.placement.dragon_reanchor_distance",
+                    BossBarPlacementPolicy.DEFAULT_REANCHOR_DISTANCE
                 ),
-                -160.0D,
-                -32.0D
+                1.0D,
+                64.0D
             );
 
         bossAutoDistance =
@@ -413,6 +418,21 @@ public final class HudManager {
                 cfg.getString(
                     "bossbar.entity_type",
                     "ENDER_DRAGON"
+                )
+            );
+
+        bossLegacyDragonPlacementMigrated =
+            BossBarPlacementPolicy.shouldMigrateLegacyDragonPlacement(
+                bossEntityType,
+                bossPositionMode,
+                cfg.isSet(
+                    "bossbar.placement.dragon_absolute_y"
+                ),
+                cfg.isSet(
+                    "bossbar.placement.dragon_distance"
+                ),
+                cfg.isSet(
+                    "bossbar.placement.dragon_vertical_offset"
                 )
             );
 
@@ -574,8 +594,7 @@ public final class HudManager {
                 );
             }
 
-            state.bossHandle = null;
-            state.lastBossRefreshMs = 0L;
+            resetBossTracking(state);
         }
 
         if (updateTask != null) {
@@ -606,6 +625,27 @@ public final class HudManager {
                     + ", particle-safe="
                     + (hideWitherParticles ? "ON" : "OFF")
                     + "."
+            );
+        } else if ("ENDER_DRAGON".equals(bossEntityType)) {
+            KjobLogger.info(
+                "[HUD] BossBar dragon packet-only : ancre Y="
+                    + bossDragonAbsoluteY
+                    + ", recentrage="
+                    + bossDragonReanchorDistance
+                    + "m, profil="
+                    + bossPositionMode
+                    + "."
+            );
+        }
+
+        if (bossLegacyDragonPlacementMigrated) {
+            KjobLogger.warn(
+                "[HUD] Ancien placement dragon detecte "
+                    + "(dragon_distance/dragon_vertical_offset). "
+                    + "AUTO utilise maintenant dragon_absolute_y="
+                    + bossDragonAbsoluteY
+                    + " ; mettez hud.yml a jour pour supprimer "
+                    + "cette alerte."
             );
         }
     }
@@ -1270,7 +1310,7 @@ public final class HudManager {
                 player,
                 state.bossHandle
             );
-            state.bossHandle = null;
+            resetBossTracking(state);
         }
 
         state.testEntityType =
@@ -1790,17 +1830,23 @@ public final class HudManager {
                 displayedRatio
             );
 
+        UUID currentWorldId =
+            player.getWorld().getUID();
+
         if (state.bossHandle != null
-                && !entityType.equals(
-                    state.bossHandle.getEntityType()
-                )) {
+                && (!entityType.equals(
+                        state.bossHandle.getEntityType()
+                    )
+                    || !currentWorldId.equals(
+                        state.bossWorldId
+                    ))) {
 
             nmsAdapter.destroyBoss(
                 player,
                 state.bossHandle
             );
 
-            state.bossHandle = null;
+            resetBossTracking(state);
         }
 
         if (state.bossHandle == null) {
@@ -1817,6 +1863,49 @@ public final class HudManager {
                     invisible
                 );
 
+            if (state.bossHandle != null) {
+                state.bossWorldId = currentWorldId;
+                rememberBossAnchor(
+                    state,
+                    location
+                );
+                rememberBossMetadata(
+                    state,
+                    health,
+                    title,
+                    invisible
+                );
+            }
+
+            return;
+        }
+
+        boolean teleport =
+            bossFollowPlayer
+                && (location.reanchorDistance <= 0.0D
+                    || BossBarPlacementPolicy.shouldReanchor(
+                        state.bossAnchorKnown,
+                        state.bossAnchorX,
+                        state.bossAnchorY,
+                        state.bossAnchorZ,
+                        location.x,
+                        location.y,
+                        location.z,
+                        location.reanchorDistance
+                    ));
+
+        boolean metadata =
+            BossBarPlacementPolicy.requiresMetadataUpdate(
+                state.bossMetadataKnown,
+                state.bossHealth,
+                state.bossTitle,
+                state.bossInvisible,
+                health,
+                title,
+                invisible
+            );
+
+        if (!teleport && !metadata) {
             return;
         }
 
@@ -1827,14 +1916,40 @@ public final class HudManager {
                 location.x,
                 location.y,
                 location.z,
-                bossFollowPlayer,
+                teleport,
+                metadata,
                 health,
                 title,
                 invisible
             );
 
-        if (!updated) {
-            state.bossHandle = null;
+        if (updated) {
+            if (teleport) {
+                rememberBossAnchor(
+                    state,
+                    location
+                );
+            }
+
+            if (metadata) {
+                rememberBossMetadata(
+                    state,
+                    health,
+                    title,
+                    invisible
+                );
+            }
+        } else {
+            /*
+             * Ne jamais laisser une ancienne entité packet-only côté client
+             * si une mise à jour échoue : le prochain passage recréera un
+             * handle propre avec un nouvel identifiant.
+             */
+            nmsAdapter.destroyBoss(
+                player,
+                state.bossHandle
+            );
+            resetBossTracking(state);
         }
     }
 
@@ -1859,10 +1974,11 @@ public final class HudManager {
             if (invisible
                     && "ENDER_DRAGON".equals(entityType)) {
 
-                return frontLocation(
-                    location,
-                    bossDragonDistance,
-                    bossDragonVerticalOffset
+                return new BossBarLocation(
+                    location.getX(),
+                    bossDragonAbsoluteY,
+                    location.getZ(),
+                    bossDragonReanchorDistance
                 );
             }
 
@@ -2014,6 +2130,43 @@ public final class HudManager {
         );
     }
 
+    private static void rememberBossAnchor(
+            PlayerHudState state,
+            BossBarLocation location) {
+
+        state.bossAnchorKnown = true;
+        state.bossAnchorX = location.x;
+        state.bossAnchorY = location.y;
+        state.bossAnchorZ = location.z;
+    }
+
+    private static void rememberBossMetadata(
+            PlayerHudState state,
+            float health,
+            String title,
+            boolean invisible) {
+
+        state.bossMetadataKnown = true;
+        state.bossHealth = health;
+        state.bossTitle = title;
+        state.bossInvisible = invisible;
+    }
+
+    private static void resetBossTracking(
+            PlayerHudState state) {
+
+        if (state == null) {
+            return;
+        }
+
+        state.bossHandle = null;
+        state.bossWorldId = null;
+        state.bossAnchorKnown = false;
+        state.bossMetadataKnown = false;
+        state.bossTitle = null;
+        state.lastBossRefreshMs = 0L;
+    }
+
     private void updateSnapshot(
             PlayerData data,
             JobDefinition job,
@@ -2141,8 +2294,7 @@ public final class HudManager {
             state.bossHandle
         );
 
-        state.bossHandle = null;
-        state.lastBossRefreshMs = 0L;
+        resetBossTracking(state);
     }
 
     private void clearActionBarState(
@@ -2458,15 +2610,32 @@ public final class HudManager {
         private final double x;
         private final double y;
         private final double z;
+        private final double reanchorDistance;
 
         private BossBarLocation(
                 double x,
                 double y,
                 double z) {
 
+            this(
+                x,
+                y,
+                z,
+                0.0D
+            );
+        }
+
+        private BossBarLocation(
+                double x,
+                double y,
+                double z,
+                double reanchorDistance) {
+
             this.x = x;
             this.y = y;
             this.z = z;
+            this.reanchorDistance =
+                Math.max(0.0D, reanchorDistance);
         }
     }
 
@@ -2491,6 +2660,15 @@ public final class HudManager {
 
         // BossBar.
         private HudNmsAdapter.BossHandle bossHandle;
+        private UUID bossWorldId;
+        private boolean bossAnchorKnown;
+        private double bossAnchorX;
+        private double bossAnchorY;
+        private double bossAnchorZ;
+        private boolean bossMetadataKnown;
+        private float bossHealth;
+        private String bossTitle;
+        private boolean bossInvisible;
         private long lastBossRefreshMs;
 
         // Test.
