@@ -1,64 +1,59 @@
-# KjobUltimate — Index et Vue d'Ensemble
+# KjobsUltimate
 
-> Plugin de jobs 100% configurable pour SparrowMC (KhopeSpigot 1.8.8)
-> Version cible : 1.0.0 | Java 8 | Maven
+Système de métiers de Volkaria pour KHopeSpigot 1.8.8, compilé en bytecode
+Java 8. La branche `refactor/v3-foundation` porte la refonte V3 actuellement
+en validation.
 
----
+## État de la version
 
-## 🗂 Structure du Projet
+- version courante : `3.16.3` ;
+- build : Maven, sans JAR local ni `systemPath` ;
+- stockage de développement : SQLite WAL ;
+- stockage de production prévu : MySQL/HikariCP ;
+- GUI : Kgui ;
+- HUD : ActionBar et BossBar packet-only ;
+- cible d'architecture : 500 joueurs, marge de conception à 700.
 
+La correction Dragon V3.16.3 est testée automatiquement, mais doit encore
+passer la matrice visuelle Vanilla/OptiFine/Lunar avant fusion dans `main` et
+création du tag. Voir
+[docs/V3.16.3-DRAGON-BOSSBAR-FIX.md](docs/V3.16.3-DRAGON-BOSSBAR-FIX.md).
+
+## Compiler
+
+Prérequis : JDK 8 ou JDK 17 et Maven. Le résultat reste ciblé Java 8.
+
+```powershell
+mvn clean verify
 ```
-KjobsUltimate/
-├── README.md                    ← ce fichier
-├── TODO-AVANT-CODE.md           ← checklist complète avant de coder ← LIRE EN PREMIER
-├── libs/                        ← JARs serveur (Vault, PAPI, Kgui, etc.)
-│
-├── docs/
-│   ├── architecture/            ← Vue globale, flux XP, schéma DB
-│   │   ├── ARCHITECTURE-GLOBALE.md
-│   │   ├── FLUX-XP-LEVELUP.md
-│   │   └── DONNEES-JOUEUR-SCHEMA.md
-│   │
-│   ├── systemes/                ← Un doc par système fonctionnel
-│   │   ├── ANTI-ABUSE.md
-│   │   ├── HUD-BOSSBAR-ACTIONBAR.md
-│   │   ├── JOB-SLOTS-SYSTEM.md
-│   │   ├── QUETES-SYSTEM.md
-│   │   └── SCOREBOARD-TAB.md
-│   │
-│   ├── gui/                     ← Tout ce qui concerne les interfaces
-│   │   ├── GUI-VUE-GLOBALE.md
-│   │   ├── GUI-BACKGROUNDS-CUSTOM.md
-│   │   └── REVIEW-GUI-HORSE-COMPLET.md
-│   │
-│   ├── config/                  ← Structure et référence des fichiers YAML
-│   │   ├── CONFIG-FICHIERS-STRUCTURE.md
-│   │   └── CONFIG-REFERENCE.md
-│   │
-│   └── dev/                     ← Documents pour le développement
-│       ├── PRE-DEV-CHECKLIST.md  ← Checklist détaillée par item
-│       ├── PLAN-IMPLEMENTATION.md ← Ordre des phases de développement
-│       ├── INTEGRATION-MAP.md    ← Hooks inter-plugins (Kstacker, Kcraft, Kgui…)
-│       ├── QUESTIONS-LIST.md     ← Toutes les décisions de design (toutes prises ✅)
-│       ├── EDGE-CASES.md         ← Comportements limites documentés
-│       ├── FAISABILITE-JOBS-SYSTEM.md
-│       └── CONSOLE-LOGGING.md   ← Logger coloré KjobLogger (ANSI, PandaSpigot)
-│
-└── notes/                       ← Notes internes, idées, historique
-    ├── CREATIVITE-COMPLETE.md
-    ├── historique-discussion-sonnet.md
-    └── idees-chat-avec-chatgpt.md
-```
+
+Artefact produit : `target/KjobsUltimate-3.16.3.jar`.
+
+Les plugins de serveur ne doivent jamais être ajoutés au dépôt. Les
+dépendances de compilation sont déclarées dans `pom.xml`; les intégrations
+optionnelles sont résolues au runtime par leurs contrats publics.
+
+## Documentation
+
+- `docs/architecture/` : architecture et flux ;
+- `docs/config/` : références YAML ;
+- `docs/gui/` : intégration Kgui ;
+- `docs/systemes/` : comportements fonctionnels ;
+- `docs/dev/` : décisions et matrices de test.
+
+## Licence
+
+Code source visible, tous droits réservés. Voir [LICENSE](LICENSE).
 
 ---
 
 ## Résumé du Plugin
 
-**KjobUltimate** est le système de jobs principal du serveur SparrowMC. Il gère :
+**KjobsUltimate** est le système de métiers principal de Volkaria. Il gère :
 - **6 jobs** : Mineur, Farmer, Hunter, Prétorien, Artisan et Pilleur
 - **Système de slots configurable** : 1 slot par défaut, déblocage progressif au level 5, 10, 15... (désactivable)
 - **Quêtes permanentes V1** avec progression et récompenses transactionnelles
-- **HUD temps réel** : BossBar NMS (fake wither), ActionBar XP, Achievement level up
+- **HUD temps réel** : BossBar NMS packet-only, ActionBar XP, Achievement level up
 - **Tab Scoreboard** : Header/Footer NMS configurable dans `tab.yml`
 - **GUI via Kgui** : ContentProviderAPI — menus paginés délégués à Kgui
 - **Anti-abuse** : SilkTouch, cultures immatures, cooldown position, anti-PvP farm
