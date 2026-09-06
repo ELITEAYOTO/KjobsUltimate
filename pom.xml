@@ -66,7 +66,7 @@
         <dependency>
             <groupId>com.github.ELITEAYOTO.Kgui</groupId>
             <artifactId>kgui-api</artifactId>
-            <version>31a4d39</version>
+            <version>fe79e27</version>
             <scope>provided</scope>
         </dependency>
 
@@ -76,7 +76,7 @@
         <dependency>
             <groupId>com.github.ELITEAYOTO.Kfaction</groupId>
             <artifactId>kfaction-api</artifactId>
-            <version>659a90e</version>
+            <version>517f5713880a326391e00103146dd2ab528e3912</version>
             <scope>provided</scope>
         </dependency>
 

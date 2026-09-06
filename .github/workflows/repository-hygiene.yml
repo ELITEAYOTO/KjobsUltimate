@@ -1,0 +1,29 @@
+name: Repository hygiene
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repository-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out complete history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Fetch every branch and tag
+        run: |
+          git fetch --force --prune --no-recurse-submodules origin \
+            '+refs/heads/*:refs/remotes/origin/*' \
+            '+refs/tags/*:refs/tags/*'
+
+      - name: Check JAR paths throughout reachable history
+        env:
+          HYGIENE_REPOSITORY: ${{ github.repository }}
+        run: python3 .github/scripts/check_repository_hygiene.py --repository "$HYGIENE_REPOSITORY"
